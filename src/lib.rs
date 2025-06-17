@@ -42,7 +42,7 @@ pub fn create_physics_world() {
         .build();
     let tricep_handle = rigid_body_set.insert(tricep_body);
 
-    let tricep_collider = ColliderBuilder::cuboid(0.5, 0.5)
+    let tricep_collider = ColliderBuilder::cuboid(0.25, 0.04)
         .restitution(0.7)
         .friction(0.3)
         .active_events(ActiveEvents::COLLISION_EVENTS)
@@ -58,13 +58,13 @@ pub fn create_physics_world() {
 
     // Create the second box (attached to end of first box)
     let forearm_body = RigidBodyBuilder::dynamic()
-        .translation(vector![2.0, wall_middle_y]) // Position it to the right of tricep
+        .translation(vector![1.515, wall_middle_y]) // Position it to the right of tricep
         .can_sleep(false)
         .ccd_enabled(true)
         .build();
     let forearm_handle = rigid_body_set.insert(forearm_body);
 
-    let forearm_collider = ColliderBuilder::cuboid(0.4, 0.4)
+    let forearm_collider = ColliderBuilder::cuboid(0.25, 0.035)
         .restitution(0.7)
         .friction(0.3)
         .active_events(ActiveEvents::COLLISION_EVENTS)
@@ -80,13 +80,13 @@ pub fn create_physics_world() {
 
     // Create the third box (smaller, attached to second box)
     let palm_body = RigidBodyBuilder::dynamic()
-        .translation(vector![2.8, wall_middle_y]) // Position it to the right of forearm
+        .translation(vector![1.83, wall_middle_y]) // Position it to the right of forearm
         .can_sleep(false)
         .ccd_enabled(true)
         .build();
     let palm_handle = rigid_body_set.insert(palm_body);
 
-    let palm_collider = ColliderBuilder::cuboid(0.25, 0.25) 
+    let palm_collider = ColliderBuilder::cuboid(0.05, 0.015) 
         .restitution(0.7)
         .friction(0.3)
         .active_events(ActiveEvents::COLLISION_EVENTS)
@@ -99,6 +99,106 @@ pub fn create_physics_world() {
         .local_anchor2(point![-0.25, 0.0]) // Left edge of palm
         .build();
     impulse_joint_set.insert(forearm_handle, palm_handle, wrist_joint, true);
+
+    // Create first finger segment
+    let lower_index_finger_body = RigidBodyBuilder::dynamic()
+        .translation(vector![1.920, wall_middle_y])
+        .can_sleep(false)
+        .ccd_enabled(true)
+        .build();
+    
+    let lower_index_finger_collider = ColliderBuilder::cuboid(0.025, 0.01)
+        .restitution(0.7)
+        .friction(0.3)
+        .active_events(ActiveEvents::COLLISION_EVENTS)
+        .sensor(false)
+        .build();
+
+    // Create second finger segment
+    let upper_index_finger_body = RigidBodyBuilder::dynamic()
+        .translation(vector![1.980, wall_middle_y])
+        .can_sleep(false)
+        .ccd_enabled(true)
+        .build();
+    
+    let upper_index_finger_collider = ColliderBuilder::cuboid(0.025, 0.01)
+        .restitution(0.7)
+        .friction(0.3)
+        .active_events(ActiveEvents::COLLISION_EVENTS)
+        .sensor(false)
+        .build();
+
+    // Add the bodies and colliders to the physics world
+    let lower_index_finger_handle = rigid_body_set.insert(lower_index_finger_body);
+    let upper_index_finger_handle = rigid_body_set.insert(upper_index_finger_body);
+    collider_set.insert_with_parent(lower_index_finger_collider, lower_index_finger_handle, &mut rigid_body_set);
+    collider_set.insert_with_parent(upper_index_finger_collider, upper_index_finger_handle, &mut rigid_body_set);
+
+    // Joint connecting palm to first finger segment
+    let palm_index_finger_joint = RevoluteJointBuilder::new()
+        .local_anchor1(point![0.05, 0.0])  // Right end of palm
+        .local_anchor2(point![-0.025, 0.0]) // Left end of first finger segment
+        .build();
+
+    // Joint connecting first finger segment to second finger segment
+    let middle_index_finger_joint = RevoluteJointBuilder::new()
+        .local_anchor1(point![0.025, 0.0])  // Right end of first finger segment
+        .local_anchor2(point![-0.025, 0.0]) // Left end of second finger segment
+        .build();
+
+    // Insert the joints
+    impulse_joint_set.insert(palm_handle, lower_index_finger_handle, palm_index_finger_joint, true);
+    impulse_joint_set.insert(lower_index_finger_handle, upper_index_finger_handle, middle_index_finger_joint, true);
+
+    // Create first middle finger segment
+    let lower_thumb_body = RigidBodyBuilder::dynamic()
+        .translation(vector![1.83, wall_middle_y - 0.05])
+        .can_sleep(false)
+        .ccd_enabled(true)
+        .build();
+    
+    let lower_thumb_collider = ColliderBuilder::cuboid(0.01, 0.025)
+        .restitution(0.7)
+        .friction(0.3)
+        .active_events(ActiveEvents::COLLISION_EVENTS)
+        .sensor(false)
+        .build();
+
+    // Create second middle finger segment
+    let upper_thumb_body = RigidBodyBuilder::dynamic()
+        .translation(vector![1.83, wall_middle_y - 0.11])
+        .can_sleep(false)
+        .ccd_enabled(true)
+        .build();
+    
+    let upper_thumb_collider = ColliderBuilder::cuboid(0.01, 0.025)
+        .restitution(0.7)
+        .friction(0.3)
+        .active_events(ActiveEvents::COLLISION_EVENTS)
+        .sensor(false)
+        .build();
+
+    // Add the bodies and colliders to the physics world
+    let lower_thumb_handle = rigid_body_set.insert(lower_thumb_body);
+    let upper_thumb_handle = rigid_body_set.insert(upper_thumb_body);
+    collider_set.insert_with_parent(lower_thumb_collider, lower_thumb_handle, &mut rigid_body_set);
+    collider_set.insert_with_parent(upper_thumb_collider, upper_thumb_handle, &mut rigid_body_set);
+
+    // Joint connecting palm to first middle finger segment (at bottom center of palm)
+    let palm_thumb_joint = RevoluteJointBuilder::new()
+        .local_anchor1(point![0.0, -0.015])  // Bottom center of palm
+        .local_anchor2(point![0.0, 0.01])    // Top center of first middle finger segment
+        .build();
+
+    // Joint connecting first middle finger segment to second middle finger segment
+    let middle_thumb_joint = RevoluteJointBuilder::new()
+        .local_anchor1(point![0.0, -0.01])   // Bottom center of first middle finger segment
+        .local_anchor2(point![0.0, 0.01])    // Top center of second middle finger segment
+        .build();
+
+    // Insert the joints
+    impulse_joint_set.insert(palm_handle, lower_thumb_handle, palm_thumb_joint, true);
+    impulse_joint_set.insert(lower_thumb_handle, upper_thumb_handle, middle_thumb_joint, true);
 
     let gravity = vector![0.0, -9.81];
     let mut integration_parameters = IntegrationParameters::default();
@@ -148,7 +248,51 @@ pub fn create_physics_world() {
                 if !colliders.is_empty() {
                     if let Some(collider) = collider_set.get(colliders[0]) {
                         let aabb = collider.compute_aabb();
-                        println!("Palm boundary box: min=({:.3}, {:.3}), max=({:.3}, {:.3})\n",
+                        println!("Palm boundary box: min=({:.3}, {:.3}), max=({:.3}, {:.3})",
+                                 aabb.mins.x, aabb.mins.y, aabb.maxs.x, aabb.maxs.y);
+                    }
+                }
+            }
+
+            if let Some(rb_lower_index) = rigid_body_set.get(lower_index_finger_handle) {
+                let colliders = rb_lower_index.colliders();
+                if !colliders.is_empty() {
+                    if let Some(collider) = collider_set.get(colliders[0]) {
+                        let aabb = collider.compute_aabb();
+                        println!("Lower index finger boundary box: min=({:.3}, {:.3}), max=({:.3}, {:.3})",
+                                 aabb.mins.x, aabb.mins.y, aabb.maxs.x, aabb.maxs.y);
+                    }
+                }
+            }
+
+            if let Some(rb_upper_index) = rigid_body_set.get(upper_index_finger_handle) {
+                let colliders = rb_upper_index.colliders();
+                if !colliders.is_empty() {
+                    if let Some(collider) = collider_set.get(colliders[0]) {
+                        let aabb = collider.compute_aabb();
+                        println!("Upper index finger boundary box: min=({:.3}, {:.3}), max=({:.3}, {:.3})",
+                                 aabb.mins.x, aabb.mins.y, aabb.maxs.x, aabb.maxs.y);
+                    }
+                }
+            }
+
+            if let Some(rb_lower_thumb) = rigid_body_set.get(lower_thumb_handle) {
+                let colliders = rb_lower_thumb.colliders();
+                if !colliders.is_empty() {
+                    if let Some(collider) = collider_set.get(colliders[0]) {
+                        let aabb = collider.compute_aabb();
+                        println!("Lower thumb boundary box: min=({:.3}, {:.3}), max=({:.3}, {:.3})",
+                                 aabb.mins.x, aabb.mins.y, aabb.maxs.x, aabb.maxs.y);
+                    }
+                }
+            }
+
+            if let Some(rb_upper_thumb) = rigid_body_set.get(upper_thumb_handle) {
+                let colliders = rb_upper_thumb.colliders();
+                if !colliders.is_empty() {
+                    if let Some(collider) = collider_set.get(colliders[0]) {
+                        let aabb = collider.compute_aabb();
+                        println!("Upper thumb boundary box: min=({:.3}, {:.3}), max=({:.3}, {:.3})\n",
                                  aabb.mins.x, aabb.mins.y, aabb.maxs.x, aabb.maxs.y);
                     }
                 }
