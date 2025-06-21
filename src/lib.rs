@@ -1,3 +1,8 @@
+mod ai;
+
+use crate::ai::AI;
+use burn::prelude::Backend;
+use burn::tensor::Tensor;
 use rapier2d::na::{Point2, Vector2};
 use rapier2d::prelude::*;
 
@@ -74,10 +79,12 @@ impl Arm {
         // Calculate positions based on wall position and component dimensions
         let wall_right_edge = wall_x + WALL_HALF_WIDTH;
         let tricep_x = wall_right_edge + TRICEP_TO_WALL_SPACING + TRICEP_HALF_WIDTH;
-        let forearm_x = tricep_x + TRICEP_HALF_WIDTH + FOREARM_HALF_WIDTH + TRICEP_TO_FOREARM_SPACING;
+        let forearm_x =
+            tricep_x + TRICEP_HALF_WIDTH + FOREARM_HALF_WIDTH + TRICEP_TO_FOREARM_SPACING;
         let palm_x = forearm_x + FOREARM_HALF_WIDTH + PALM_HALF_WIDTH + FOREARM_TO_PALM_SPACING;
         let lower_finger_x = palm_x + PALM_HALF_WIDTH + FINGER_HALF_WIDTH + PALM_TO_FINGER_SPACING;
-        let upper_finger_x = lower_finger_x + FINGER_HALF_WIDTH + FINGER_HALF_WIDTH + FINGER_SEGMENT_SPACING;
+        let upper_finger_x =
+            lower_finger_x + FINGER_HALF_WIDTH + FINGER_HALF_WIDTH + FINGER_SEGMENT_SPACING;
 
         // Tricep
         let tricep_body = RigidBodyBuilder::dynamic()
@@ -150,11 +157,16 @@ impl Arm {
             .build();
         let lower_index_finger_handle = rigid_body_set.insert(lower_index_finger_body);
 
-        let lower_index_finger_collider = ColliderBuilder::cuboid(FINGER_HALF_WIDTH, FINGER_HALF_HEIGHT)
-            .restitution(0.7)
-            .friction(0.3)
-            .build();
-        collider_set.insert_with_parent(lower_index_finger_collider, lower_index_finger_handle, rigid_body_set);
+        let lower_index_finger_collider =
+            ColliderBuilder::cuboid(FINGER_HALF_WIDTH, FINGER_HALF_HEIGHT)
+                .restitution(0.7)
+                .friction(0.3)
+                .build();
+        collider_set.insert_with_parent(
+            lower_index_finger_collider,
+            lower_index_finger_handle,
+            rigid_body_set,
+        );
 
         // Upper index finger
         let upper_index_finger_body = RigidBodyBuilder::dynamic()
@@ -164,24 +176,39 @@ impl Arm {
             .build();
         let upper_index_finger_handle = rigid_body_set.insert(upper_index_finger_body);
 
-        let upper_index_finger_collider = ColliderBuilder::cuboid(FINGER_HALF_WIDTH, FINGER_HALF_HEIGHT)
-            .restitution(0.7)
-            .friction(0.3)
-            .build();
-        collider_set.insert_with_parent(upper_index_finger_collider, upper_index_finger_handle, rigid_body_set);
+        let upper_index_finger_collider =
+            ColliderBuilder::cuboid(FINGER_HALF_WIDTH, FINGER_HALF_HEIGHT)
+                .restitution(0.7)
+                .friction(0.3)
+                .build();
+        collider_set.insert_with_parent(
+            upper_index_finger_collider,
+            upper_index_finger_handle,
+            rigid_body_set,
+        );
 
         // Index finger joints
         let palm_index_finger_joint = RevoluteJointBuilder::new()
             .local_anchor1(PALM_INDEX_ANCHOR)
             .local_anchor2(FINGER_JOINT_ANCHOR_LEFT)
             .build();
-        impulse_joint_set.insert(palm_handle, lower_index_finger_handle, palm_index_finger_joint, true);
+        impulse_joint_set.insert(
+            palm_handle,
+            lower_index_finger_handle,
+            palm_index_finger_joint,
+            true,
+        );
 
         let middle_index_finger_joint = RevoluteJointBuilder::new()
             .local_anchor1(FINGER_JOINT_ANCHOR)
             .local_anchor2(FINGER_JOINT_ANCHOR_LEFT)
             .build();
-        impulse_joint_set.insert(lower_index_finger_handle, upper_index_finger_handle, middle_index_finger_joint, true);
+        impulse_joint_set.insert(
+            lower_index_finger_handle,
+            upper_index_finger_handle,
+            middle_index_finger_joint,
+            true,
+        );
 
         // Lower thumb
         let lower_thumb_body = RigidBodyBuilder::dynamic()
@@ -199,7 +226,10 @@ impl Arm {
 
         // Upper thumb
         let upper_thumb_body = RigidBodyBuilder::dynamic()
-            .translation(vector![palm_x, wall_middle_y + PALM_TO_THUMB_OFFSET_Y + THUMB_SEGMENT_SPACING])
+            .translation(vector![
+                palm_x,
+                wall_middle_y + PALM_TO_THUMB_OFFSET_Y + THUMB_SEGMENT_SPACING
+            ])
             .can_sleep(false)
             .ccd_enabled(true)
             .build();
@@ -222,7 +252,12 @@ impl Arm {
             .local_anchor1(THUMB_JOINT_ANCHOR_BOTTOM)
             .local_anchor2(THUMB_JOINT_ANCHOR_TOP)
             .build();
-        impulse_joint_set.insert(lower_thumb_handle, upper_thumb_handle, middle_thumb_joint, true);
+        impulse_joint_set.insert(
+            lower_thumb_handle,
+            upper_thumb_handle,
+            middle_thumb_joint,
+            true,
+        );
 
         Self {
             tricep_handle,
@@ -257,11 +292,7 @@ impl Arm {
                         let aabb = collider.compute_aabb();
                         println!(
                             "{} boundary box: min=({:.3}, {:.3}), max=({:.3}, {:.3})",
-                            name,
-                            aabb.mins.x,
-                            aabb.mins.y,
-                            aabb.maxs.x,
-                            aabb.maxs.y
+                            name, aabb.mins.x, aabb.mins.y, aabb.maxs.x, aabb.maxs.y
                         );
                     }
                 }
@@ -311,7 +342,8 @@ impl Arm {
         let world_corners: Vec<Point2<f32>> = local_corners
             .iter()
             .map(|&local_corner| {
-                rigid_body_pos.rotation.transform_point(&local_corner) + rigid_body_pos.translation.vector
+                rigid_body_pos.rotation.transform_point(&local_corner)
+                    + rigid_body_pos.translation.vector
             })
             .collect();
 
@@ -324,7 +356,9 @@ impl Arm {
             joint_to_center.normalize()
         } else {
             // Fallback: use the rigid body's local x-axis as main direction
-            rigid_body_pos.rotation.transform_vector(&Vector2::new(1.0, 0.0))
+            rigid_body_pos
+                .rotation
+                .transform_vector(&Vector2::new(1.0, 0.0))
         };
 
         // Project each corner onto the main axis and find the two farthest
@@ -352,8 +386,8 @@ impl Arm {
             .skip(1) // Skip the absolute farthest
             .find(|(corner, projection)| {
                 // Look for a corner that's close in projection distance but different in position
-                (projection - farthest_projection).abs() < half_extents.norm() * 0.5 &&
-                    (corner.y - farthest_corner.y).abs() > f32::EPSILON
+                (projection - farthest_projection).abs() < half_extents.norm() * 0.5
+                    && (corner.y - farthest_corner.y).abs() > f32::EPSILON
             })
             .map(|(corner, _)| *corner)
             .unwrap_or_else(|| {
@@ -387,7 +421,11 @@ impl Arm {
     ) -> Option<((f32, f32), (f32, f32))> {
         // Get the wall joint position (shoulder joint anchor point on the wall)
         // The shoulder joint connects at WALL_SHOULDER_ANCHOR on the wall
-        let wall_joint_pos = if let Some(wall_rb) = rigid_body_set.iter().find(|(_, rb)| rb.body_type() == RigidBodyType::Fixed).map(|(_, rb)| rb) {
+        let wall_joint_pos = if let Some(wall_rb) = rigid_body_set
+            .iter()
+            .find(|(_, rb)| rb.body_type() == RigidBodyType::Fixed)
+            .map(|(_, rb)| rb)
+        {
             let wall_pos = wall_rb.position();
             wall_pos.rotation.transform_point(&WALL_SHOULDER_ANCHOR) + wall_pos.translation.vector
         } else {
@@ -399,7 +437,12 @@ impl Arm {
             }
         };
 
-        Self::farthest_corners_from_joint(self.tricep_handle, wall_joint_pos, rigid_body_set, collider_set)
+        Self::farthest_corners_from_joint(
+            self.tricep_handle,
+            wall_joint_pos,
+            rigid_body_set,
+            collider_set,
+        )
     }
 
     /// Gets the upper and lower corners of the forearm that are furthest from the elbow joint.
@@ -417,17 +460,26 @@ impl Arm {
         // The elbow joint connects at TRICEP_ELBOW_ANCHOR on the tricep
         let elbow_joint_pos = if let Some(tricep_rb) = rigid_body_set.get(self.tricep_handle) {
             let tricep_pos = tricep_rb.position();
-            tricep_pos.rotation.transform_point(&TRICEP_ELBOW_ANCHOR) + tricep_pos.translation.vector
+            tricep_pos.rotation.transform_point(&TRICEP_ELBOW_ANCHOR)
+                + tricep_pos.translation.vector
         } else {
             // Fallback: assume elbow is at forearm's left anchor position
             if let Some(forearm_rb) = rigid_body_set.get(self.forearm_handle) {
-                Point2::new(forearm_rb.translation().x + FOREARM_ELBOW_ANCHOR.x, forearm_rb.translation().y)
+                Point2::new(
+                    forearm_rb.translation().x + FOREARM_ELBOW_ANCHOR.x,
+                    forearm_rb.translation().y,
+                )
             } else {
                 return None;
             }
         };
 
-        Self::farthest_corners_from_joint(self.forearm_handle, elbow_joint_pos, rigid_body_set, collider_set)
+        Self::farthest_corners_from_joint(
+            self.forearm_handle,
+            elbow_joint_pos,
+            rigid_body_set,
+            collider_set,
+        )
     }
 
     /// Gets the upper and lower corners of the palm that are furthest from the wrist joint.
@@ -445,17 +497,26 @@ impl Arm {
         // The wrist joint connects at FOREARM_WRIST_ANCHOR on the forearm
         let wrist_joint_pos = if let Some(forearm_rb) = rigid_body_set.get(self.forearm_handle) {
             let forearm_pos = forearm_rb.position();
-            forearm_pos.rotation.transform_point(&FOREARM_WRIST_ANCHOR) + forearm_pos.translation.vector
+            forearm_pos.rotation.transform_point(&FOREARM_WRIST_ANCHOR)
+                + forearm_pos.translation.vector
         } else {
             // Fallback: assume wrist is at palm's left anchor position
             if let Some(palm_rb) = rigid_body_set.get(self.palm_handle) {
-                Point2::new(palm_rb.translation().x + PALM_WRIST_ANCHOR.x, palm_rb.translation().y)
+                Point2::new(
+                    palm_rb.translation().x + PALM_WRIST_ANCHOR.x,
+                    palm_rb.translation().y,
+                )
             } else {
                 return None;
             }
         };
 
-        Self::farthest_corners_from_joint(self.palm_handle, wrist_joint_pos, rigid_body_set, collider_set)
+        Self::farthest_corners_from_joint(
+            self.palm_handle,
+            wrist_joint_pos,
+            rigid_body_set,
+            collider_set,
+        )
     }
 
     /// Gets the upper and lower corners of the lower index finger that are furthest from the palm joint.
@@ -477,13 +538,21 @@ impl Arm {
         } else {
             // Fallback: assume joint is at finger's left anchor position
             if let Some(finger_rb) = rigid_body_set.get(self.lower_index_finger_handle) {
-                Point2::new(finger_rb.translation().x + FINGER_JOINT_ANCHOR_LEFT.x, finger_rb.translation().y)
+                Point2::new(
+                    finger_rb.translation().x + FINGER_JOINT_ANCHOR_LEFT.x,
+                    finger_rb.translation().y,
+                )
             } else {
                 return None;
             }
         };
 
-        Self::farthest_corners_from_joint(self.lower_index_finger_handle, palm_joint_pos, rigid_body_set, collider_set)
+        Self::farthest_corners_from_joint(
+            self.lower_index_finger_handle,
+            palm_joint_pos,
+            rigid_body_set,
+            collider_set,
+        )
     }
 
     /// Gets the upper and lower corners of the upper index finger that are furthest from the middle joint.
@@ -499,19 +568,31 @@ impl Arm {
     ) -> Option<((f32, f32), (f32, f32))> {
         // Get the middle index finger joint position (middle joint anchor point on the lower finger)
         // The joint connects at FINGER_JOINT_ANCHOR on the lower index finger
-        let middle_joint_pos = if let Some(lower_finger_rb) = rigid_body_set.get(self.lower_index_finger_handle) {
-            let lower_finger_pos = lower_finger_rb.position();
-            lower_finger_pos.rotation.transform_point(&FINGER_JOINT_ANCHOR) + lower_finger_pos.translation.vector
-        } else {
-            // Fallback: assume joint is at upper finger's left anchor position
-            if let Some(upper_finger_rb) = rigid_body_set.get(self.upper_index_finger_handle) {
-                Point2::new(upper_finger_rb.translation().x + FINGER_JOINT_ANCHOR_LEFT.x, upper_finger_rb.translation().y)
+        let middle_joint_pos =
+            if let Some(lower_finger_rb) = rigid_body_set.get(self.lower_index_finger_handle) {
+                let lower_finger_pos = lower_finger_rb.position();
+                lower_finger_pos
+                    .rotation
+                    .transform_point(&FINGER_JOINT_ANCHOR)
+                    + lower_finger_pos.translation.vector
             } else {
-                return None;
-            }
-        };
+                // Fallback: assume joint is at upper finger's left anchor position
+                if let Some(upper_finger_rb) = rigid_body_set.get(self.upper_index_finger_handle) {
+                    Point2::new(
+                        upper_finger_rb.translation().x + FINGER_JOINT_ANCHOR_LEFT.x,
+                        upper_finger_rb.translation().y,
+                    )
+                } else {
+                    return None;
+                }
+            };
 
-        Self::farthest_corners_from_joint(self.upper_index_finger_handle, middle_joint_pos, rigid_body_set, collider_set)
+        Self::farthest_corners_from_joint(
+            self.upper_index_finger_handle,
+            middle_joint_pos,
+            rigid_body_set,
+            collider_set,
+        )
     }
 
     /// Gets the upper and lower corners of the lower thumb that are furthest from the palm joint.
@@ -533,13 +614,21 @@ impl Arm {
         } else {
             // Fallback: assume joint is at thumb's top anchor position
             if let Some(thumb_rb) = rigid_body_set.get(self.lower_thumb_handle) {
-                Point2::new(thumb_rb.translation().x, thumb_rb.translation().y + THUMB_JOINT_ANCHOR_TOP.y)
+                Point2::new(
+                    thumb_rb.translation().x,
+                    thumb_rb.translation().y + THUMB_JOINT_ANCHOR_TOP.y,
+                )
             } else {
                 return None;
             }
         };
 
-        Self::farthest_corners_from_joint(self.lower_thumb_handle, palm_joint_pos, rigid_body_set, collider_set)
+        Self::farthest_corners_from_joint(
+            self.lower_thumb_handle,
+            palm_joint_pos,
+            rigid_body_set,
+            collider_set,
+        )
     }
 
     /// Gets the upper and lower corners of the upper thumb that are furthest from the middle joint.
@@ -555,19 +644,31 @@ impl Arm {
     ) -> Option<((f32, f32), (f32, f32))> {
         // Get the middle thumb joint position (middle joint anchor point on the lower thumb)
         // The joint connects at THUMB_JOINT_ANCHOR_BOTTOM on the lower thumb
-        let middle_joint_pos = if let Some(lower_thumb_rb) = rigid_body_set.get(self.lower_thumb_handle) {
-            let lower_thumb_pos = lower_thumb_rb.position();
-            lower_thumb_pos.rotation.transform_point(&THUMB_JOINT_ANCHOR_BOTTOM) + lower_thumb_pos.translation.vector
-        } else {
-            // Fallback: assume joint is at upper thumb's top anchor position
-            if let Some(upper_thumb_rb) = rigid_body_set.get(self.upper_thumb_handle) {
-                Point2::new(upper_thumb_rb.translation().x, upper_thumb_rb.translation().y + THUMB_JOINT_ANCHOR_TOP.y)
+        let middle_joint_pos =
+            if let Some(lower_thumb_rb) = rigid_body_set.get(self.lower_thumb_handle) {
+                let lower_thumb_pos = lower_thumb_rb.position();
+                lower_thumb_pos
+                    .rotation
+                    .transform_point(&THUMB_JOINT_ANCHOR_BOTTOM)
+                    + lower_thumb_pos.translation.vector
             } else {
-                return None;
-            }
-        };
+                // Fallback: assume joint is at upper thumb's top anchor position
+                if let Some(upper_thumb_rb) = rigid_body_set.get(self.upper_thumb_handle) {
+                    Point2::new(
+                        upper_thumb_rb.translation().x,
+                        upper_thumb_rb.translation().y + THUMB_JOINT_ANCHOR_TOP.y,
+                    )
+                } else {
+                    return None;
+                }
+            };
 
-        Self::farthest_corners_from_joint(self.upper_thumb_handle, middle_joint_pos, rigid_body_set, collider_set)
+        Self::farthest_corners_from_joint(
+            self.upper_thumb_handle,
+            middle_joint_pos,
+            rigid_body_set,
+            collider_set,
+        )
     }
 
     /// Applies a scaled force to a specified rigid body, pointing toward or away from an adjusted position relative to a joint.
@@ -660,7 +761,6 @@ impl Arm {
         true
     }
 
-
     /// Applies a scaled force to the tricep, pointing toward or away from a position 0.05 units above the wall joint.
     pub fn apply_tricep_force(
         &self,
@@ -706,11 +806,7 @@ impl Arm {
     }
 
     /// Applies a scaled force to the palm, pointing toward or away from a position 0.05 units above the wrist joint.
-    pub fn apply_palm_force(
-        &self,
-        scaling_factor: f32,
-        rigid_body_set: &mut RigidBodySet,
-    ) -> bool {
+    pub fn apply_palm_force(&self, scaling_factor: f32, rigid_body_set: &mut RigidBodySet) -> bool {
         self.apply_force_to_body(
             self.palm_handle,
             self.forearm_handle,
@@ -790,7 +886,6 @@ impl Arm {
         )
     }
 }
-
 
 pub struct PhysicsWorld {
     rigid_body_set: RigidBodySet,
@@ -898,69 +993,120 @@ impl PhysicsWorld {
 
     /// Prints the current state of all arm components
     pub fn print_arm_state(&self) {
-        self.arm.print_state(&self.rigid_body_set, &self.collider_set);
+        self.arm
+            .print_state(&self.rigid_body_set, &self.collider_set);
     }
 
     // Force application methods
     pub fn apply_tricep_force(&mut self, scaling_factor: f32) -> bool {
-        self.arm.apply_tricep_force(scaling_factor, &mut self.rigid_body_set)
+        self.arm
+            .apply_tricep_force(scaling_factor, &mut self.rigid_body_set)
     }
 
     pub fn apply_forearm_force(&mut self, scaling_factor: f32) -> bool {
-        self.arm.apply_forearm_force(scaling_factor, &mut self.rigid_body_set)
+        self.arm
+            .apply_forearm_force(scaling_factor, &mut self.rigid_body_set)
     }
 
     pub fn apply_palm_force(&mut self, scaling_factor: f32) -> bool {
-        self.arm.apply_palm_force(scaling_factor, &mut self.rigid_body_set)
+        self.arm
+            .apply_palm_force(scaling_factor, &mut self.rigid_body_set)
     }
 
     pub fn apply_lower_index_finger_force(&mut self, scaling_factor: f32) -> bool {
-        self.arm.apply_lower_index_finger_force(scaling_factor, &mut self.rigid_body_set)
+        self.arm
+            .apply_lower_index_finger_force(scaling_factor, &mut self.rigid_body_set)
     }
 
     pub fn apply_upper_index_finger_force(&mut self, scaling_factor: f32) -> bool {
-        self.arm.apply_upper_index_finger_force(scaling_factor, &mut self.rigid_body_set)
+        self.arm
+            .apply_upper_index_finger_force(scaling_factor, &mut self.rigid_body_set)
     }
 
     pub fn apply_lower_thumb_force(&mut self, scaling_factor: f32) -> bool {
-        self.arm.apply_lower_thumb_force(scaling_factor, &mut self.rigid_body_set)
+        self.arm
+            .apply_lower_thumb_force(scaling_factor, &mut self.rigid_body_set)
     }
 
     pub fn apply_upper_thumb_force(&mut self, scaling_factor: f32) -> bool {
-        self.arm.apply_upper_thumb_force(scaling_factor, &mut self.rigid_body_set)
+        self.arm
+            .apply_upper_thumb_force(scaling_factor, &mut self.rigid_body_set)
     }
 
     // Farthest corners query methods
     pub fn tricep_farthest_corners(&self) -> Option<((f32, f32), (f32, f32))> {
-        self.arm.tricep_farthest_corners(&self.rigid_body_set, &self.collider_set)
+        self.arm
+            .tricep_farthest_corners(&self.rigid_body_set, &self.collider_set)
     }
 
     pub fn forearm_farthest_corners(&self) -> Option<((f32, f32), (f32, f32))> {
-        self.arm.forearm_farthest_corners(&self.rigid_body_set, &self.collider_set)
+        self.arm
+            .forearm_farthest_corners(&self.rigid_body_set, &self.collider_set)
     }
 
     pub fn palm_farthest_corners(&self) -> Option<((f32, f32), (f32, f32))> {
-        self.arm.palm_farthest_corners(&self.rigid_body_set, &self.collider_set)
+        self.arm
+            .palm_farthest_corners(&self.rigid_body_set, &self.collider_set)
     }
 
     pub fn lower_index_finger_farthest_corners(&self) -> Option<((f32, f32), (f32, f32))> {
-        self.arm.lower_index_finger_farthest_corners(&self.rigid_body_set, &self.collider_set)
+        self.arm
+            .lower_index_finger_farthest_corners(&self.rigid_body_set, &self.collider_set)
     }
 
     pub fn upper_index_finger_farthest_corners(&self) -> Option<((f32, f32), (f32, f32))> {
-        self.arm.upper_index_finger_farthest_corners(&self.rigid_body_set, &self.collider_set)
+        self.arm
+            .upper_index_finger_farthest_corners(&self.rigid_body_set, &self.collider_set)
     }
 
     pub fn lower_thumb_farthest_corners(&self) -> Option<((f32, f32), (f32, f32))> {
-        self.arm.lower_thumb_farthest_corners(&self.rigid_body_set, &self.collider_set)
+        self.arm
+            .lower_thumb_farthest_corners(&self.rigid_body_set, &self.collider_set)
     }
 
     pub fn upper_thumb_farthest_corners(&self) -> Option<((f32, f32), (f32, f32))> {
-        self.arm.upper_thumb_farthest_corners(&self.rigid_body_set, &self.collider_set)
+        self.arm
+            .upper_thumb_farthest_corners(&self.rigid_body_set, &self.collider_set)
     }
-
 }
 
+pub fn add_to_input(tensor_input: &mut Vec<f32>, corners: Option<((f32, f32), (f32, f32))>) {
+    let corners = corners.unwrap();
+    tensor_input.push(corners.0 .0);
+    tensor_input.push(corners.0 .1);
+    tensor_input.push(corners.1 .0);
+    tensor_input.push(corners.1 .1);
+}
+
+pub fn test_ai<B: Backend>(network: &AI<B>, device: &B::Device) {
+    let mut world = PhysicsWorld::new();
+    let mut tensor_input: Vec<f32> = Vec::new();
+    add_to_input(&mut tensor_input, world.tricep_farthest_corners());
+    add_to_input(&mut tensor_input, world.forearm_farthest_corners());
+    add_to_input(&mut tensor_input, world.palm_farthest_corners());
+    add_to_input(
+        &mut tensor_input,
+        world.lower_index_finger_farthest_corners(),
+    );
+    add_to_input(
+        &mut tensor_input,
+        world.upper_index_finger_farthest_corners(),
+    );
+    add_to_input(&mut tensor_input, world.lower_thumb_farthest_corners());
+    add_to_input(&mut tensor_input, world.upper_thumb_farthest_corners());
+
+    // ball x
+    tensor_input.push(0.0);
+    // ball y
+    tensor_input.push(0.0);
+    // distance to basket x
+    tensor_input.push(0.0);
+    // distance to basket y
+    tensor_input.push(0.0);
+
+    let tensor = Tensor::<B, 1>::from_floats(tensor_input.as_slice(), device);
+    let forces = network.apply(tensor);
+}
 
 pub fn create_physics_world() {
     let mut physics_world = PhysicsWorld::new();
@@ -972,7 +1118,9 @@ pub fn create_physics_world() {
             physics_world.print_arm_state();
 
             // Print tricep's farthest corners
-            if let Some(((upper_x, upper_y), (lower_x, lower_y))) = physics_world.tricep_farthest_corners() {
+            if let Some(((upper_x, upper_y), (lower_x, lower_y))) =
+                physics_world.tricep_farthest_corners()
+            {
                 println!(
                     "Tricep farthest corners: upper=({:.3}, {:.3}), lower=({:.3}, {:.3})",
                     upper_x, upper_y, lower_x, lower_y
@@ -982,7 +1130,9 @@ pub fn create_physics_world() {
             }
 
             // Print forearm's farthest corners
-            if let Some(((upper_x, upper_y), (lower_x, lower_y))) = physics_world.forearm_farthest_corners() {
+            if let Some(((upper_x, upper_y), (lower_x, lower_y))) =
+                physics_world.forearm_farthest_corners()
+            {
                 println!(
                     "Forearm farthest corners: upper=({:.3}, {:.3}), lower=({:.3}, {:.3})",
                     upper_x, upper_y, lower_x, lower_y

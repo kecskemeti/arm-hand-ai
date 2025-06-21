@@ -5,3 +5,4 @@ edition = "2021"
 
 [dependencies]
 rapier2d = "0.26.1"  # For 2D physics
+burn = { version = "0.17.1", features = [ "ndarray"] }
