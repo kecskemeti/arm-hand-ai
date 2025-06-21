@@ -4,4 +4,4 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-rapier2d = "0.17.0"  # For 2D physics
+rapier2d = "0.26.1"  # For 2D physics
