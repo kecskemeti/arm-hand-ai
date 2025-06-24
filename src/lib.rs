@@ -1,7 +1,8 @@
-mod ai;
+pub mod ai;
 
 use crate::ai::AI;
 use burn::prelude::Backend;
+use burn::tensor::cast::ToElement;
 use burn::tensor::Tensor;
 use rapier2d::na::{Point2, Vector2};
 use rapier2d::prelude::*;
@@ -1081,31 +1082,45 @@ pub fn add_to_input(tensor_input: &mut Vec<f32>, corners: Option<((f32, f32), (f
 pub fn test_ai<B: Backend>(network: &AI<B>, device: &B::Device) {
     let mut world = PhysicsWorld::new();
     let mut tensor_input: Vec<f32> = Vec::new();
-    add_to_input(&mut tensor_input, world.tricep_farthest_corners());
-    add_to_input(&mut tensor_input, world.forearm_farthest_corners());
-    add_to_input(&mut tensor_input, world.palm_farthest_corners());
-    add_to_input(
-        &mut tensor_input,
-        world.lower_index_finger_farthest_corners(),
-    );
-    add_to_input(
-        &mut tensor_input,
-        world.upper_index_finger_farthest_corners(),
-    );
-    add_to_input(&mut tensor_input, world.lower_thumb_farthest_corners());
-    add_to_input(&mut tensor_input, world.upper_thumb_farthest_corners());
 
-    // ball x
-    tensor_input.push(0.0);
-    // ball y
-    tensor_input.push(0.0);
-    // distance to basket x
-    tensor_input.push(0.0);
-    // distance to basket y
-    tensor_input.push(0.0);
+    for _ in 0..500 {
+        tensor_input.clear();
+        add_to_input(&mut tensor_input, world.tricep_farthest_corners());
+        add_to_input(&mut tensor_input, world.forearm_farthest_corners());
+        add_to_input(&mut tensor_input, world.palm_farthest_corners());
+        add_to_input(
+            &mut tensor_input,
+            world.lower_index_finger_farthest_corners(),
+        );
+        add_to_input(
+            &mut tensor_input,
+            world.upper_index_finger_farthest_corners(),
+        );
+        add_to_input(&mut tensor_input, world.lower_thumb_farthest_corners());
+        add_to_input(&mut tensor_input, world.upper_thumb_farthest_corners());
 
-    let tensor = Tensor::<B, 1>::from_floats(tensor_input.as_slice(), device);
-    let forces = network.apply(tensor);
+        // ball x
+        tensor_input.push(0.0);
+        // ball y
+        tensor_input.push(0.0);
+        // distance to basket x
+        tensor_input.push(0.0);
+        // distance to basket y
+        tensor_input.push(0.0);
+
+        let tensor = Tensor::<B, 1>::from_floats(tensor_input.as_slice(), device);
+        let data = network.apply(tensor).to_data();
+        let forces: &[f32] = data.as_slice().unwrap();
+
+        world.apply_tricep_force(forces[0] * 2. - 1.);
+        world.apply_forearm_force(forces[1] * 2. - 1.);
+        world.apply_palm_force(forces[2] * 2. - 1.);
+        world.apply_lower_index_finger_force(forces[3] * 2. - 1.);
+        world.apply_upper_index_finger_force(forces[4] * 2. - 1.);
+        world.apply_lower_thumb_force(forces[5] * 2. - 1.);
+        world.apply_upper_thumb_force(forces[6] * 2. - 1.);
+        world.step();
+    }
 }
 
 pub fn create_physics_world() {
@@ -1154,9 +1169,22 @@ pub fn create_physics_world() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use burn::backend::ndarray::NdArrayDevice;
+    use burn::backend::NdArray;
+    use std::time::SystemTime;
 
     #[test]
     fn test_physics_simulation() {
         create_physics_world();
+    }
+
+    #[test]
+    fn test_ai_simulation() {
+        type BE = NdArray<f32>;
+        let device = NdArrayDevice::Cpu;
+        let before = SystemTime::now();
+        test_ai(&AI::<BE>::new(&device), &device);
+        let time_taken = before.elapsed().unwrap().as_millis();
+        println!("Time taken: {} ms", time_taken);
     }
 }

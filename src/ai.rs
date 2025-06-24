@@ -49,7 +49,7 @@ impl<B: Backend> AI<B> {
         let x = sigmoid(self.hidden_1.forward(x));
         let x = sigmoid(self.hidden_2.forward(x));
         let x = softmax(self.hidden_3.forward(x), 0);
-        let x = self.output.forward(x);
+        let x = sigmoid(self.output.forward(x));
         x
     }
 }
