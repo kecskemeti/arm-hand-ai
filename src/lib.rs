@@ -1079,8 +1079,19 @@ pub fn add_to_input(tensor_input: &mut Vec<f32>, corners: Option<((f32, f32), (f
     tensor_input.push(corners.1 .1);
 }
 
-pub fn test_ai<B: Backend>(network: &AI<B>, device: &B::Device) {
+pub fn test_ai<B: Backend>(network: &AI<B>, device: &B::Device) -> f32 {
     let mut world = PhysicsWorld::new();
+
+    let mut init_state: Vec<f32> = Vec::new();
+
+    add_to_input(&mut init_state, world.tricep_farthest_corners());
+    add_to_input(&mut init_state, world.forearm_farthest_corners());
+    add_to_input(&mut init_state, world.palm_farthest_corners());
+    add_to_input(&mut init_state, world.lower_index_finger_farthest_corners());
+    add_to_input(&mut init_state, world.upper_index_finger_farthest_corners());
+    add_to_input(&mut init_state, world.lower_thumb_farthest_corners());
+    add_to_input(&mut init_state, world.upper_thumb_farthest_corners());
+
     let mut tensor_input: Vec<f32> = Vec::new();
 
     for _ in 0..500 {
@@ -1121,6 +1132,24 @@ pub fn test_ai<B: Backend>(network: &AI<B>, device: &B::Device) {
         world.apply_upper_thumb_force(forces[6] * 2. - 1.);
         world.step();
     }
+
+    let mut end_state: Vec<f32> = Vec::new();
+
+    add_to_input(&mut end_state, world.tricep_farthest_corners());
+    add_to_input(&mut end_state, world.forearm_farthest_corners());
+    add_to_input(&mut end_state, world.palm_farthest_corners());
+    add_to_input(&mut end_state, world.lower_index_finger_farthest_corners());
+    add_to_input(&mut end_state, world.upper_index_finger_farthest_corners());
+    add_to_input(&mut end_state, world.lower_thumb_farthest_corners());
+    add_to_input(&mut end_state, world.upper_thumb_farthest_corners());
+
+    // reciprocal of mape (mean absolute percentage error)
+    init_state.len() as f32
+        / init_state
+            .iter()
+            .zip(end_state.iter())
+            .map(|(a, b)| ((a - b) / a).abs())
+            .sum::<f32>()
 }
 
 pub fn create_physics_world() {
@@ -1183,8 +1212,10 @@ mod tests {
         type BE = NdArray<f32>;
         let device = NdArrayDevice::Cpu;
         let before = SystemTime::now();
-        test_ai(&AI::<BE>::new(&device), &device);
+        let treat = test_ai(&AI::<BE>::new(&device), &device);
         let time_taken = before.elapsed().unwrap().as_millis();
         println!("Time taken: {} ms", time_taken);
+
+        println!("Treat: {treat}");
     }
 }
