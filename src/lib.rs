@@ -1079,6 +1079,15 @@ pub fn add_to_input(tensor_input: &mut Vec<f32>, corners: Option<((f32, f32), (f
     tensor_input.push(corners.1 .1);
 }
 
+pub fn saved_to_both(
+    tensor_input: &mut Vec<f32>,
+    saved_corners: &mut Vec<f32>,
+    corners: Option<((f32, f32), (f32, f32))>,
+) {
+    add_to_input(tensor_input, corners);
+    add_to_input(saved_corners, corners);
+}
+
 pub fn test_ai<B: Backend>(network: &AI<B>, device: &B::Device) -> f32 {
     let mut world = PhysicsWorld::new();
 
@@ -1092,23 +1101,60 @@ pub fn test_ai<B: Backend>(network: &AI<B>, device: &B::Device) -> f32 {
     add_to_input(&mut init_state, world.lower_thumb_farthest_corners());
     add_to_input(&mut init_state, world.upper_thumb_farthest_corners());
 
+    let mut previous_corners: Vec<f32> = Vec::new();
     let mut tensor_input: Vec<f32> = Vec::new();
+
+    let mut overall_score = 0.0;
 
     for _ in 0..500 {
         tensor_input.clear();
-        add_to_input(&mut tensor_input, world.tricep_farthest_corners());
-        add_to_input(&mut tensor_input, world.forearm_farthest_corners());
-        add_to_input(&mut tensor_input, world.palm_farthest_corners());
-        add_to_input(
+        tensor_input.extend(&previous_corners);
+        previous_corners.clear();
+
+        saved_to_both(
             &mut tensor_input,
+            &mut previous_corners,
+            world.tricep_farthest_corners(),
+        );
+        saved_to_both(
+            &mut tensor_input,
+            &mut previous_corners,
+            world.forearm_farthest_corners(),
+        );
+        saved_to_both(
+            &mut tensor_input,
+            &mut previous_corners,
+            world.palm_farthest_corners(),
+        );
+        saved_to_both(
+            &mut tensor_input,
+            &mut previous_corners,
             world.lower_index_finger_farthest_corners(),
         );
-        add_to_input(
+        saved_to_both(
             &mut tensor_input,
+            &mut previous_corners,
             world.upper_index_finger_farthest_corners(),
         );
-        add_to_input(&mut tensor_input, world.lower_thumb_farthest_corners());
-        add_to_input(&mut tensor_input, world.upper_thumb_farthest_corners());
+        saved_to_both(
+            &mut tensor_input,
+            &mut previous_corners,
+            world.lower_thumb_farthest_corners(),
+        );
+        saved_to_both(
+            &mut tensor_input,
+            &mut previous_corners,
+            world.upper_thumb_farthest_corners(),
+        );
+
+        // previous ball x
+        tensor_input.push(0.0);
+        // previous ball y
+        tensor_input.push(0.0);
+        // previous distance to basket x
+        tensor_input.push(0.0);
+        // previous distance to basket y
+        tensor_input.push(0.0);
 
         // ball x
         tensor_input.push(0.0);
@@ -1118,7 +1164,7 @@ pub fn test_ai<B: Backend>(network: &AI<B>, device: &B::Device) -> f32 {
         tensor_input.push(0.0);
         // distance to basket y
         tensor_input.push(0.0);
-
+        println!("tensor input {:?}", tensor_input.len());
         let tensor = Tensor::<B, 1>::from_floats(tensor_input.as_slice(), device);
         let data = network.apply(tensor).to_data();
         let forces: &[f32] = data.as_slice().unwrap();
@@ -1131,8 +1177,13 @@ pub fn test_ai<B: Backend>(network: &AI<B>, device: &B::Device) -> f32 {
         world.apply_lower_thumb_force(forces[5] * 2. - 1.);
         world.apply_upper_thumb_force(forces[6] * 2. - 1.);
         world.step();
+        overall_score += scorer(&init_state, &world);
     }
 
+    overall_score
+}
+
+pub fn scorer(init_state: &Vec<f32>, world: &PhysicsWorld) -> f32 {
     let mut end_state: Vec<f32> = Vec::new();
 
     add_to_input(&mut end_state, world.tricep_farthest_corners());

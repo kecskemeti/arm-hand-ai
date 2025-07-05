@@ -15,7 +15,7 @@ pub struct AI<B: Backend> {
 
 impl<B: Backend> AI<B> {
     pub fn new(device: &B::Device) -> Self {
-        let input_config = LinearConfig::new(32, 64)
+        let input_config = LinearConfig::new(64, 128)
             .with_bias(true)
             .with_initializer(Initializer::Normal { mean: 0., std: 1. });
 
@@ -23,11 +23,11 @@ impl<B: Backend> AI<B> {
             .with_bias(true)
             .with_initializer(Initializer::Normal { mean: 0., std: 1. });
 
-        let hidden_1_config = LinearConfig::new(64, 64)
+        let hidden_1_config = LinearConfig::new(128, 128)
             .with_bias(true)
             .with_initializer(Initializer::Normal { mean: 0., std: 1. });
 
-        let hidden_2_config = LinearConfig::new(64, 64)
+        let hidden_2_config = LinearConfig::new(128, 64)
             .with_bias(true)
             .with_initializer(Initializer::Normal { mean: 0., std: 1. });
 
