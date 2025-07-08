@@ -10,7 +10,7 @@ fn main() {
     type BE = NdArray<f32>;
     let device = NdArrayDevice::Cpu;
     let mut all_ais: Vec<_> = (0..200).map(|_| AI::<BE>::new(&device)).collect();
-    for i in 0..15 {
+    for i in 0..1000 {
         let before = SystemTime::now();
         let inner_ais = all_ais.clone();
         let mut ai_w_scores = inner_ais
@@ -34,20 +34,20 @@ fn make_new_generation<B: Backend>(
     ais_w_score: Vec<(f32, AI<B>)>,
     device: &B::Device,
 ) -> Vec<AI<B>> {
-    let ten_percent = (0.10 * ais_w_score.len() as f32) as usize;
+    let quarter_generation = (0.25 * ais_w_score.len() as f32) as usize;
     let best_ones: Vec<_> = ais_w_score
         .iter()
-        .take(ten_percent)
+        .take(quarter_generation)
         .map(|(_, ai)| ai.clone())
         .collect();
     let mut new_generation = Vec::new();
-    new_generation.extend((0..(ten_percent / 3)).map(|_| AI::<B>::new(device)));
+    new_generation.extend((0..(quarter_generation / 10)).map(|_| AI::<B>::new(device)));
     let mut rng = rand::thread_rng();
     for _ in 0..(ais_w_score.len() - best_ones.len() - new_generation.len()) {
-        let mother = rng.random_range(0..ten_percent);
+        let mother = rng.random_range(0..quarter_generation);
 
         let father = loop {
-            let potential_father = rng.random_range(0..ten_percent);
+            let potential_father = rng.random_range(0..quarter_generation);
             if potential_father != mother {
                 break potential_father;
             }

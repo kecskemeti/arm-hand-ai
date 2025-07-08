@@ -1101,7 +1101,7 @@ pub fn test_ai<B: Backend>(network: &AI<B>, device: &B::Device) -> f32 {
     add_to_input(&mut init_state, world.lower_thumb_farthest_corners());
     add_to_input(&mut init_state, world.upper_thumb_farthest_corners());
 
-    let mut previous_corners: Vec<f32> = Vec::new();
+    let mut previous_corners = init_state.clone();
     let mut tensor_input: Vec<f32> = Vec::new();
 
     let mut overall_score = 0.0;
@@ -1164,7 +1164,6 @@ pub fn test_ai<B: Backend>(network: &AI<B>, device: &B::Device) -> f32 {
         tensor_input.push(0.0);
         // distance to basket y
         tensor_input.push(0.0);
-        println!("tensor input {:?}", tensor_input.len());
         let tensor = Tensor::<B, 1>::from_floats(tensor_input.as_slice(), device);
         let data = network.apply(tensor).to_data();
         let forces: &[f32] = data.as_slice().unwrap();
