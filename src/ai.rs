@@ -3,6 +3,7 @@ use burn::nn::{Initializer, Linear, LinearConfig};
 use burn::prelude::Backend;
 use burn::tensor::activation::{sigmoid, softmax};
 use burn::tensor::{Bool, Distribution, Tensor};
+use rand::Rng;
 
 #[derive(Module, Debug)]
 pub struct AI<B: Backend> {
@@ -75,16 +76,44 @@ impl<B: Backend> AI<B> {
         }
     }
 
-    pub fn interleave<const N: usize>(a: &Tensor<B, 1>, b: &Tensor<B, 1>) -> Tensor<B, 1>
-    where
-        Size<N>: IndexSet<B, N>,
-    {
-        let even = <Size<N>>::even_indices();
-        let odd = <Size<N>>::odd_indices();
-        let even_vals = a.clone().mask_where(odd.clone(), a.zeros_like());
-        let odd_vals = b.clone().mask_where(even.clone(), b.zeros_like());
+    fn interleave_bw_linear(a: &Linear<B>, b: &Linear<B>, device: &B::Device) -> Linear<B> {
+        Linear {
+            weight: Param::from_tensor(Self::interleave(
+                a.weight.clone().into_value(),
+                b.weight.clone().into_value(),
+                device,
+            )),
+            bias: b.bias.clone(),
+        }
+    }
 
-        even_vals + odd_vals
+    pub fn interleave(a: Tensor<B, 2>, b: Tensor<B, 2>, device: &B::Device) -> Tensor<B, 2> {
+        let a_size = a.shape().dims[0];
+        let b_size = b.shape().dims[0];
+        assert_eq!(a_size, b_size);
+
+        let mut rng = rand::rng();
+        let a_mask: u128 = rng.random();
+        let b_mask = !a_mask;
+
+        let a_mask_arr = (0..a_size)
+            .map(|i| (a_mask >> i) & 1 == 1)
+            .collect::<Vec<_>>();
+
+        let b_mask_arr = (0..a_size)
+            .map(|i| (b_mask >> i) & 1 == 1)
+            .collect::<Vec<_>>();
+
+        let a_vals = a.clone().mask_where(
+            Tensor::<B, 1, Bool>::from_data(a_mask_arr.as_slice(), device),
+            a.zeros_like(),
+        );
+        let b_vals = b.clone().mask_where(
+            Tensor::<B, 1, Bool>::from_data(b_mask_arr.as_slice(), device),
+            b.zeros_like(),
+        );
+
+        a_vals + b_vals
     }
 
     pub fn offspring(&self, other_parent: &Self) -> Self {
@@ -107,36 +136,3 @@ impl<B: Backend> AI<B> {
         x
     }
 }
-
-pub trait IndexSet<B: Backend, const N: usize> {
-    fn even_indices() -> &'static Tensor<B, 1, Bool>;
-    fn odd_indices() -> &'static Tensor<B, 1, Bool>;
-}
-
-pub struct Size<const N: usize>;
-
-fn odd_indices(n: usize) -> Vec<bool> {
-    (0..n).map(|i| i % 2 == 1).collect()
-}
-
-fn even_indices(n: usize) -> Vec<bool> {
-    (0..n).map(|i| i % 2 == 0).collect()
-}
-
-// macro_rules! impl_index_set {
-//     ($size:expr,$backend:ty) => {
-//         static EVEN_INDICES: std::sync::LazyLock<Tensor<$backend, 1, Bool>> =
-//             std::sync::LazyLock::new(|| Tensor::from_vec(even_indices($size));
-//         static ODD_INDICES: std::sync::LazyLock<Tensor<$backend, 1, Bool>> =
-//             std::sync::LazyLock::new(|| Tensor::from_vec(odd_indices($size));
-//
-//         impl IndexSet<$backend, $size> for Size<$size> {
-//             fn even_indices() -> &'static Tensor<B, 1, Bool> {
-//                 &Tensor::from_vec(even_indices($size))
-//             }
-//             fn odd_indices() -> &'static Tensor<B, 1, Bool> {
-//                 &Tensor::from_vec(odd_indices($size))
-//             }
-//         }
-//     };
-// }
