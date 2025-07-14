@@ -34,6 +34,7 @@ fn make_new_generation<B: Backend>(
     ais_w_score: Vec<(f32, AI<B>)>,
     device: &B::Device,
 ) -> Vec<AI<B>> {
+    // dont use all parents at one time
     let quarter_generation = (0.25 * ais_w_score.len() as f32) as usize;
     let best_ones: Vec<_> = ais_w_score
         .iter()
@@ -41,7 +42,7 @@ fn make_new_generation<B: Backend>(
         .map(|(_, ai)| ai.clone())
         .collect();
     let mut new_generation = Vec::new();
-    new_generation.extend((0..(quarter_generation / 10)).map(|_| AI::<B>::new(device)));
+    new_generation.extend((0..3).map(|_| AI::<B>::new(device)));
     let mut rng = rand::thread_rng();
     for _ in 0..(ais_w_score.len() - best_ones.len() - new_generation.len()) {
         let mother = rng.random_range(0..quarter_generation);
@@ -53,7 +54,14 @@ fn make_new_generation<B: Backend>(
             }
         };
 
-        new_generation.push(best_ones[mother].offspring(&best_ones[father]));
+        let offspring = match rng.random_range(0..10) {
+            0 | 1 | 2 | 3 | 4 | 5 | 6 => best_ones[mother].offspring_iw(&best_ones[father]),
+            7 | 8 => best_ones[mother].offspring(&best_ones[father]),
+            9 => best_ones[mother].jiggle(),
+
+            _ => unreachable!(),
+        };
+        new_generation.push(offspring);
     }
 
     new_generation.extend(best_ones);

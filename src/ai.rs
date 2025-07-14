@@ -1,9 +1,9 @@
 use burn::module::{Module, Param};
 use burn::nn::{Initializer, Linear, LinearConfig};
 use burn::prelude::Backend;
-use burn::tensor::activation::{sigmoid, softmax};
-use burn::tensor::{Bool, Distribution, Tensor};
-use rand::Rng;
+use burn::tensor::activation::{relu, tanh};
+use burn::tensor::Distribution::Uniform;
+use burn::tensor::{Distribution, Tensor};
 
 #[derive(Module, Debug)]
 pub struct AI<B: Backend> {
@@ -58,7 +58,8 @@ impl<B: Backend> AI<B> {
                 .map(|p| Param::from_tensor(Self::jiggle_tensor(p, d))),
         }
     }
-    fn jiggle(&self) -> Self {
+    pub fn jiggle(&self) -> Self {
+        // distribution should be a param!
         let d = Distribution::Normal(0., 0.0001);
         Self {
             input: Self::jiggle_linear(&self.input, &d),
@@ -76,42 +77,30 @@ impl<B: Backend> AI<B> {
         }
     }
 
-    fn interleave_bw_linear(a: &Linear<B>, b: &Linear<B>, device: &B::Device) -> Linear<B> {
+    fn interleave_bw_linear(a: &Linear<B>, b: &Linear<B>) -> Linear<B> {
         Linear {
             weight: Param::from_tensor(Self::interleave(
                 a.weight.clone().into_value(),
                 b.weight.clone().into_value(),
-                device,
             )),
-            bias: b.bias.clone(),
+            bias: b
+                .bias
+                .as_ref()
+                .map(|p| Param::from_tensor(p.clone().into_value())),
         }
     }
 
-    pub fn interleave(a: Tensor<B, 2>, b: Tensor<B, 2>, device: &B::Device) -> Tensor<B, 2> {
-        let a_size = a.shape().dims[0];
-        let b_size = b.shape().dims[0];
+    pub fn interleave<const N: usize>(a: Tensor<B, N>, b: Tensor<B, N>) -> Tensor<B, N> {
+        let a_size = a.shape();
+        let b_size = b.shape();
         assert_eq!(a_size, b_size);
 
-        let mut rng = rand::rng();
-        let a_mask: u128 = rng.random();
-        let b_mask = !a_mask;
+        let baseline = a.random_like(Uniform(0., 1.));
+        let a_mask = baseline.clone().lower_elem(0.5);
+        let b_mask = baseline.greater_equal_elem(0.5);
 
-        let a_mask_arr = (0..a_size)
-            .map(|i| (a_mask >> i) & 1 == 1)
-            .collect::<Vec<_>>();
-
-        let b_mask_arr = (0..a_size)
-            .map(|i| (b_mask >> i) & 1 == 1)
-            .collect::<Vec<_>>();
-
-        let a_vals = a.clone().mask_where(
-            Tensor::<B, 1, Bool>::from_data(a_mask_arr.as_slice(), device),
-            a.zeros_like(),
-        );
-        let b_vals = b.clone().mask_where(
-            Tensor::<B, 1, Bool>::from_data(b_mask_arr.as_slice(), device),
-            b.zeros_like(),
-        );
+        let a_vals = a.clone().mask_where(a_mask, a.zeros_like());
+        let b_vals = b.clone().mask_where(b_mask, b.zeros_like());
 
         a_vals + b_vals
     }
@@ -127,12 +116,30 @@ impl<B: Backend> AI<B> {
         .jiggle()
     }
 
+    pub fn offspring_iw(&self, other_parent: &Self) -> Self {
+        Self {
+            input: Self::interleave_bw_linear(&self.input, &other_parent.input),
+            output: Self::interleave_bw_linear(&self.output, &other_parent.output),
+            hidden_1: Self::interleave_bw_linear(&self.hidden_1, &other_parent.hidden_1),
+            hidden_2: Self::interleave_bw_linear(&self.hidden_2, &other_parent.hidden_2),
+            hidden_3: Self::interleave_bw_linear(&self.hidden_3, &other_parent.hidden_3),
+        }
+        .jiggle()
+    }
+
+    // create an averaging offspring
+
+    // create an offspring when we change the layers
+    // linear 1 is coming from parent 1
+    // linear 2...
+    // combine
+
     pub fn apply(&self, input: Tensor<B, 1>) -> Tensor<B, 1> {
-        let x = sigmoid(self.input.forward(input));
-        let x = sigmoid(self.hidden_1.forward(x));
-        let x = sigmoid(self.hidden_2.forward(x));
-        let x = softmax(self.hidden_3.forward(x), 0);
-        let x = sigmoid(self.output.forward(x));
+        let x = relu(self.input.forward(input));
+        let x = relu(self.hidden_1.forward(x));
+        let x = relu(self.hidden_2.forward(x));
+        let x = relu(self.hidden_3.forward(x));
+        let x = tanh(self.output.forward(x));
         x
     }
 }
