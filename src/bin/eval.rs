@@ -1,6 +1,7 @@
 use burn::backend::ndarray::NdArrayDevice;
 use burn::backend::NdArray;
 use burn::prelude::Backend;
+use burn::tensor::Distribution;
 use engine::ai::AI;
 use engine::test_ai;
 use rand::Rng;
@@ -26,13 +27,14 @@ fn main() {
         println!("{i} Best score: {}", high_score);
         println!("{i} Best reciprocal: {}", 1.0 / high_score);
 
-        all_ais = make_new_generation(ai_w_scores, &device);
+        all_ais = make_new_generation(ai_w_scores, &device, i);
     }
 }
 
 fn make_new_generation<B: Backend>(
     ais_w_score: Vec<(f32, AI<B>)>,
     device: &B::Device,
+    past_generation_count: usize,
 ) -> Vec<AI<B>> {
     // dont use all parents at one time
     let quarter_generation = (0.25 * ais_w_score.len() as f32) as usize;
@@ -44,6 +46,9 @@ fn make_new_generation<B: Backend>(
     let mut new_generation = Vec::new();
     new_generation.extend((0..3).map(|_| AI::<B>::new(device)));
     let mut rng = rand::thread_rng();
+
+    let distribution = Distribution::Normal(0.0, 0.05 / (past_generation_count + 1) as f64);
+
     for _ in 0..(ais_w_score.len() - best_ones.len() - new_generation.len()) {
         let mother = rng.random_range(0..quarter_generation);
 
@@ -55,9 +60,11 @@ fn make_new_generation<B: Backend>(
         };
 
         let offspring = match rng.random_range(0..10) {
-            0 | 1 | 2 | 3 | 4 | 5 | 6 => best_ones[mother].offspring_iw(&best_ones[father]),
-            7 | 8 => best_ones[mother].offspring(&best_ones[father]),
-            9 => best_ones[mother].jiggle(),
+            0 | 1 | 2 | 3 | 4 | 5 | 6 => {
+                best_ones[mother].offspring_iw(&best_ones[father], &distribution)
+            }
+            7 | 8 => best_ones[mother].offspring(&best_ones[father], &distribution),
+            9 => best_ones[mother].jiggle(&distribution),
 
             _ => unreachable!(),
         };

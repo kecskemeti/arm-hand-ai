@@ -58,9 +58,7 @@ impl<B: Backend> AI<B> {
                 .map(|p| Param::from_tensor(Self::jiggle_tensor(p, d))),
         }
     }
-    pub fn jiggle(&self) -> Self {
-        // distribution should be a param!
-        let d = Distribution::Normal(0., 0.0001);
+    pub fn jiggle(&self, d: &Distribution) -> Self {
         Self {
             input: Self::jiggle_linear(&self.input, &d),
             output: Self::jiggle_linear(&self.output, &d),
@@ -105,7 +103,7 @@ impl<B: Backend> AI<B> {
         a_vals + b_vals
     }
 
-    pub fn offspring(&self, other_parent: &Self) -> Self {
+    pub fn offspring(&self, other_parent: &Self, d: &Distribution) -> Self {
         Self {
             input: Self::combine_bw_linear(&self.input, &other_parent.input),
             output: Self::combine_bw_linear(&self.output, &other_parent.output),
@@ -113,10 +111,10 @@ impl<B: Backend> AI<B> {
             hidden_2: Self::combine_bw_linear(&self.hidden_2, &other_parent.hidden_2),
             hidden_3: Self::combine_bw_linear(&self.hidden_3, &other_parent.hidden_3),
         }
-        .jiggle()
+        .jiggle(d)
     }
 
-    pub fn offspring_iw(&self, other_parent: &Self) -> Self {
+    pub fn offspring_iw(&self, other_parent: &Self, d: &Distribution) -> Self {
         Self {
             input: Self::interleave_bw_linear(&self.input, &other_parent.input),
             output: Self::interleave_bw_linear(&self.output, &other_parent.output),
@@ -124,7 +122,7 @@ impl<B: Backend> AI<B> {
             hidden_2: Self::interleave_bw_linear(&self.hidden_2, &other_parent.hidden_2),
             hidden_3: Self::interleave_bw_linear(&self.hidden_3, &other_parent.hidden_3),
         }
-        .jiggle()
+        .jiggle(d)
     }
 
     // create an averaging offspring

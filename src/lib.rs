@@ -1103,8 +1103,7 @@ pub fn test_ai<B: Backend>(network: &AI<B>, device: &B::Device) -> f32 {
 
     let mut previous_corners = init_state.clone();
     let mut tensor_input: Vec<f32> = Vec::new();
-
-    let mut overall_score = 0.0;
+    let mut saved_steps_scores: Vec<f32> = Vec::new();
 
     for _ in 0..500 {
         tensor_input.clear();
@@ -1176,10 +1175,13 @@ pub fn test_ai<B: Backend>(network: &AI<B>, device: &B::Device) -> f32 {
         world.apply_lower_thumb_force(forces[5] * 2. - 1.);
         world.apply_upper_thumb_force(forces[6] * 2. - 1.);
         world.step();
-        overall_score += scorer(&init_state, &world);
+        saved_steps_scores.push(scorer(&init_state, &world));
     }
+    let last_score = *saved_steps_scores.last().unwrap();
 
-    overall_score
+    saved_steps_scores.sort_by(|a, b| a.partial_cmp(b).unwrap());
+
+    (saved_steps_scores[saved_steps_scores.len() / 2] + last_score) / 2.
 }
 
 pub fn scorer(init_state: &Vec<f32>, world: &PhysicsWorld) -> f32 {
@@ -1193,13 +1195,14 @@ pub fn scorer(init_state: &Vec<f32>, world: &PhysicsWorld) -> f32 {
     add_to_input(&mut end_state, world.lower_thumb_farthest_corners());
     add_to_input(&mut end_state, world.upper_thumb_farthest_corners());
 
-    // reciprocal of mape (mean absolute percentage error)
-    init_state.len() as f32
-        / init_state
-            .iter()
-            .zip(end_state.iter())
-            .map(|(a, b)| ((a - b) / a).abs())
-            .sum::<f32>()
+    let mape = init_state
+        .iter()
+        .zip(end_state.iter())
+        .map(|(a, b)| ((a - b) / a).abs())
+        .sum::<f32>()
+        / init_state.len() as f32;
+
+    1. / (mape + 1.)
 }
 
 pub fn create_physics_world() {
