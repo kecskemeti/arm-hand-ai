@@ -4,6 +4,7 @@ use burn::prelude::Backend;
 use burn::tensor::activation::{relu, tanh};
 use burn::tensor::Distribution::Uniform;
 use burn::tensor::{Distribution, Tensor};
+use std::ops::Deref;
 
 #[derive(Module, Debug)]
 pub struct AI<B: Backend> {
@@ -16,7 +17,7 @@ pub struct AI<B: Backend> {
 
 impl<B: Backend> AI<B> {
     pub fn new(device: &B::Device) -> Self {
-        let input_config = LinearConfig::new(64, 128)
+        let input_config = LinearConfig::new(64, 256)
             .with_bias(true)
             .with_initializer(Initializer::Normal { mean: 0., std: 1. });
 
@@ -24,7 +25,7 @@ impl<B: Backend> AI<B> {
             .with_bias(true)
             .with_initializer(Initializer::Normal { mean: 0., std: 1. });
 
-        let hidden_1_config = LinearConfig::new(128, 128)
+        let hidden_1_config = LinearConfig::new(256, 128)
             .with_bias(true)
             .with_initializer(Initializer::Normal { mean: 0., std: 1. });
 
@@ -78,13 +79,19 @@ impl<B: Backend> AI<B> {
     fn interleave_bw_linear(a: &Linear<B>, b: &Linear<B>) -> Linear<B> {
         Linear {
             weight: Param::from_tensor(Self::interleave(
-                a.weight.clone().into_value(),
-                b.weight.clone().into_value(),
+                a.weight.deref().clone(),
+                b.weight.deref().clone(),
             )),
             bias: b
                 .bias
-                .as_ref()
-                .map(|p| Param::from_tensor(p.clone().into_value())),
+                .iter()
+                .flat_map(|bp| {
+                    a.bias
+                        .as_ref()
+                        .map(|ap| Self::interleave(ap.deref().clone(), bp.deref().clone()))
+                })
+                .map(Param::from_tensor)
+                .next(),
         }
     }
 
@@ -101,6 +108,29 @@ impl<B: Backend> AI<B> {
         let b_vals = b.clone().mask_where(b_mask, b.zeros_like());
 
         a_vals + b_vals
+    }
+
+    pub fn average<const N: usize>(a: Tensor<B, N>, b: Tensor<B, N>) -> Tensor<B, N> {
+        (a + b) / 2.
+    }
+
+    fn average_bw_linear(a: &Linear<B>, b: &Linear<B>) -> Linear<B> {
+        Linear {
+            weight: Param::from_tensor(Self::average(
+                a.weight.deref().clone(),
+                b.weight.deref().clone(),
+            )),
+            bias: b
+                .bias
+                .iter()
+                .flat_map(|bp| {
+                    a.bias
+                        .as_ref()
+                        .map(|ap| Self::average(ap.deref().clone(), bp.deref().clone()))
+                })
+                .map(Param::from_tensor)
+                .next(),
+        }
     }
 
     pub fn offspring(&self, other_parent: &Self, d: &Distribution) -> Self {
@@ -125,7 +155,16 @@ impl<B: Backend> AI<B> {
         .jiggle(d)
     }
 
-    // create an averaging offspring
+    pub fn offspring_aw(&self, other_parent: &Self, d: &Distribution) -> Self {
+        Self {
+            input: Self::average_bw_linear(&self.input, &other_parent.input),
+            output: Self::average_bw_linear(&self.output, &other_parent.output),
+            hidden_1: Self::average_bw_linear(&self.hidden_1, &other_parent.hidden_1),
+            hidden_2: Self::average_bw_linear(&self.hidden_2, &other_parent.hidden_2),
+            hidden_3: Self::average_bw_linear(&self.hidden_3, &other_parent.hidden_3),
+        }
+        .jiggle(d)
+    }
 
     // create an offspring when we change the layers
     // linear 1 is coming from parent 1
