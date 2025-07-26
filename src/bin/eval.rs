@@ -13,8 +13,8 @@ fn main() {
     type BE = Candle<f32, i64>;
     let device = CandleDevice::Cpu;
 
-    let mut all_ais: Vec<_> = (0..300).map(|_| AI::<BE>::new(&device)).collect();
-    for i in 0..10000 {
+    let mut all_ais: Vec<_> = (0..500).map(|_| AI::<BE>::new(&device)).collect();
+    for i in 0..1000 {
         let before = SystemTime::now();
         let inner_ais = all_ais.clone();
         let mut ai_w_scores = inner_ais
@@ -28,7 +28,7 @@ fn main() {
 
         let high_score = ai_w_scores.iter().next().map(|(score, _)| *score).unwrap();
         println!("{i} Best score: {}", high_score);
-        println!("{i} Best reciprocal: {}", (1.0 / high_score) - 1.);
+        println!("{i} Best mape: {}", (1.0 / high_score) - 1.);
 
         all_ais = make_new_generation(ai_w_scores, &device, i);
     }
@@ -39,6 +39,22 @@ fn make_new_generation<B: Backend>(
     device: &B::Device,
     past_generation_count: usize,
 ) -> Vec<AI<B>> {
+    let best_score = ais_w_score[0].0;
+    let std_deviation = ais_w_score[0].1.max_amp()
+        * if best_score < 0.5 {
+            0.15
+        } else if best_score < 0.75 {
+            0.075
+        } else if best_score < 0.9 {
+            0.05
+        } else if best_score < 0.95 {
+            0.02
+        } else {
+            0.01
+        };
+
+    let distribution = Distribution::Normal(0.0, std_deviation as f64);
+
     // don't keep parents once they are combined.
     let quarter_generation = (0.25 * ais_w_score.len() as f32) as usize;
     let best_ones: Vec<_> = ais_w_score
@@ -49,20 +65,6 @@ fn make_new_generation<B: Backend>(
     let mut new_generation = Vec::new();
     new_generation.extend((0..3).map(|_| AI::<B>::new(device)));
     let mut rng = rand::thread_rng();
-
-    let std_deviation = if past_generation_count < 50 {
-        0.1
-    } else if past_generation_count < 150 {
-        0.05
-    } else if past_generation_count < 300 {
-        0.01
-    } else if past_generation_count < 600 {
-        0.005
-    } else {
-        0.001
-    };
-
-    let distribution = Distribution::Normal(0.0, std_deviation);
 
     for _ in 0..(ais_w_score.len() - best_ones.len() - new_generation.len()) {
         let mother = rng.random_range(0..quarter_generation);
@@ -77,7 +79,8 @@ fn make_new_generation<B: Backend>(
         let offspring = match rng.random_range(0..15) {
             0 | 1 | 2 | 3 | 4 => best_ones[mother].offspring_iw(&best_ones[father], &distribution),
             5 | 6 | 7 | 8 => best_ones[mother].offspring_aw(&best_ones[father], &distribution),
-            9 | 10 => best_ones[mother].offspring(&best_ones[father], &distribution),
+            9 => best_ones[mother].offspring(&best_ones[father], &distribution),
+            10 => best_ones[mother].offspring_layers(&best_ones[father], &distribution),
             11 | 12 => best_ones[mother].jiggle(&distribution),
             13 | 14 => best_ones[father].jiggle(&distribution),
             _ => unreachable!(),

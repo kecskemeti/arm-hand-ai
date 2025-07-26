@@ -1181,11 +1181,11 @@ pub fn test_ai<B: Backend>(network: &AI<B>, device: &B::Device) -> f32 {
 
     saved_steps_scores.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
-    (saved_steps_scores[saved_steps_scores.len() / 2]
-        + last_score
+    (saved_steps_scores[saved_steps_scores.len() / 2] * 10.0
+        + last_score * 5.
         + saved_steps_scores[0]
         + saved_steps_scores[saved_steps_scores.len() - 1])
-        / 4.
+        / 17.
 }
 
 pub fn scorer(init_state: &Vec<f32>, world: &PhysicsWorld) -> f32 {

@@ -166,10 +166,16 @@ impl<B: Backend> AI<B> {
         .jiggle(d)
     }
 
-    // create an offspring when we change the layers
-    // linear 1 is coming from parent 1
-    // linear 2...
-    // combine
+    pub fn offspring_layers(&self, other_parent: &Self, d: &Distribution) -> Self {
+        Self {
+            input: self.input.clone(),
+            output: other_parent.output.clone(),
+            hidden_1: self.hidden_1.clone(),
+            hidden_2: other_parent.hidden_2.clone(),
+            hidden_3: self.hidden_3.clone(),
+        }
+        .jiggle(d)
+    }
 
     pub fn apply(&self, input: Tensor<B, 1>) -> Tensor<B, 1> {
         let x = relu(self.input.forward(input));
@@ -178,5 +184,37 @@ impl<B: Backend> AI<B> {
         let x = relu(self.hidden_3.forward(x));
         let x = tanh(self.output.forward(x));
         x
+    }
+
+    pub fn max_amp_for_tensor<const N: usize>(input: &Tensor<B, N>) -> f32 {
+        let data = input.clone().to_data();
+        let slice: &[f32] = data.as_slice().unwrap();
+
+        slice
+            .iter()
+            .max_by(|a, b| a.abs().partial_cmp(&b.abs()).unwrap())
+            .copied()
+            .unwrap()
+            .abs()
+    }
+
+    pub fn max_amp_for_linear(input: &Linear<B>) -> f32 {
+        let weight_max = Self::max_amp_for_tensor(&input.weight);
+        let bias_max = Self::max_amp_for_tensor(input.bias.as_ref().unwrap());
+        weight_max.max(bias_max)
+    }
+    pub fn max_amp(&self) -> f32 {
+        let all_maximums = [
+            Self::max_amp_for_linear(&self.input),
+            Self::max_amp_for_linear(&self.hidden_1),
+            Self::max_amp_for_linear(&self.hidden_2),
+            Self::max_amp_for_linear(&self.hidden_3),
+            Self::max_amp_for_linear(&self.output),
+        ];
+        all_maximums
+            .iter()
+            .max_by(|a, b| a.partial_cmp(&b).unwrap())
+            .copied()
+            .unwrap()
     }
 }
