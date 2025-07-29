@@ -56,6 +56,29 @@ const FINGER_SEGMENT_SPACING: f32 = 0.005; // Small gap between finger segments
 const PALM_TO_THUMB_OFFSET_Y: f32 = -0.05; // Thumb offset below palm
 const THUMB_SEGMENT_SPACING: f32 = -0.06; // Vertical spacing between thumb segments
 
+const MAX_X: f32 = WALL_HALF_WIDTH
+    + TRICEP_TO_WALL_SPACING
+    + TRICEP_HALF_WIDTH * 2.0
+    + TRICEP_TO_FOREARM_SPACING
+    + FOREARM_HALF_WIDTH * 2.0
+    + FOREARM_TO_PALM_SPACING
+    + PALM_HALF_WIDTH * 2.0
+    + PALM_TO_FINGER_SPACING
+    + FINGER_HALF_WIDTH * 2.0
+    + FINGER_SEGMENT_SPACING
+    + FINGER_HALF_WIDTH * 2.0;
+
+const MIN_X: f32 = WALL_HALF_WIDTH;
+
+const MAX_Y: f32 = WALL_HALF_HEIGHT + MAX_X;
+
+const MIN_Y: f32 = GROUND_MIDDLE_Y + GROUND_HALF_HEIGHT;
+
+const GROUND_MIDDLE_Y: f32 = -2.0;
+
+const X_RANGE: f32 = MAX_X - MIN_X;
+const Y_RANGE: f32 = MAX_Y - MIN_Y;
+
 pub struct Arm {
     tricep_handle: RigidBodyHandle,
     forearm_handle: RigidBodyHandle,
@@ -912,7 +935,7 @@ impl PhysicsWorld {
         let mut impulse_joint_set = ImpulseJointSet::new();
 
         // Create the ground
-        let ground_y = -2.0;
+        let ground_y = GROUND_MIDDLE_Y;
         let ground_rigid_body = RigidBodyBuilder::fixed()
             .translation(vector![0.0, ground_y])
             .build();
@@ -1079,13 +1102,31 @@ pub fn add_to_input(tensor_input: &mut Vec<f32>, corners: Option<((f32, f32), (f
     tensor_input.push(corners.1 .1);
 }
 
+pub fn add_to_input_normalized(
+    tensor_input: &mut Vec<f32>,
+    corners: Option<((f32, f32), (f32, f32))>,
+) {
+    let corners = corners.unwrap();
+    tensor_input.push(normalize_x(corners.0 .0));
+    tensor_input.push(normalize_y(corners.0 .1));
+    tensor_input.push(normalize_x(corners.1 .0));
+    tensor_input.push(normalize_y(corners.1 .1));
+}
+
+pub fn normalize_x(x_value: f32) -> f32 {
+    (x_value - MIN_X) / X_RANGE
+}
+
+pub fn normalize_y(y_value: f32) -> f32 {
+    (y_value - MIN_Y) / Y_RANGE
+}
 pub fn saved_to_both(
     tensor_input: &mut Vec<f32>,
     saved_corners: &mut Vec<f32>,
     corners: Option<((f32, f32), (f32, f32))>,
 ) {
-    add_to_input(tensor_input, corners);
-    add_to_input(saved_corners, corners);
+    add_to_input_normalized(tensor_input, corners);
+    add_to_input_normalized(saved_corners, corners);
 }
 
 pub fn test_ai<B: Backend>(network: &AI<B>, device: &B::Device) -> f32 {
@@ -1101,7 +1142,22 @@ pub fn test_ai<B: Backend>(network: &AI<B>, device: &B::Device) -> f32 {
     add_to_input(&mut init_state, world.lower_thumb_farthest_corners());
     add_to_input(&mut init_state, world.upper_thumb_farthest_corners());
 
-    let mut previous_corners = init_state.clone();
+    let mut previous_corners = Vec::new();
+
+    add_to_input_normalized(&mut previous_corners, world.tricep_farthest_corners());
+    add_to_input_normalized(&mut previous_corners, world.forearm_farthest_corners());
+    add_to_input_normalized(&mut previous_corners, world.palm_farthest_corners());
+    add_to_input_normalized(
+        &mut previous_corners,
+        world.lower_index_finger_farthest_corners(),
+    );
+    add_to_input_normalized(
+        &mut previous_corners,
+        world.upper_index_finger_farthest_corners(),
+    );
+    add_to_input_normalized(&mut previous_corners, world.lower_thumb_farthest_corners());
+    add_to_input_normalized(&mut previous_corners, world.upper_thumb_farthest_corners());
+
     let mut tensor_input: Vec<f32> = Vec::new();
     let mut saved_steps_scores: Vec<f32> = Vec::new();
 
@@ -1261,7 +1317,9 @@ mod tests {
 
     #[test]
     fn test_physics_simulation() {
-        create_physics_world();
+        let mut world = PhysicsWorld::new();
+        world.print_arm_state();
+        println!("{:?}", world.upper_index_finger_farthest_corners());
     }
 
     #[test]

@@ -13,24 +13,33 @@ fn main() {
     type BE = Candle<f32, i64>;
     let device = CandleDevice::Cpu;
 
-    let mut all_ais: Vec<_> = (0..500).map(|_| AI::<BE>::new(&device)).collect();
-    for i in 0..1000 {
-        let before = SystemTime::now();
-        let inner_ais = all_ais.clone();
-        let mut ai_w_scores = inner_ais
-            .into_par_iter()
-            .map(|ai| (test_ai(&ai, &device), ai))
-            .collect::<Vec<_>>();
-        ai_w_scores.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
+    let mut islands: [Vec<_>; 5] = [
+        (0..100).map(|_| AI::<BE>::new(&device)).collect(),
+        (0..100).map(|_| AI::<BE>::new(&device)).collect(),
+        (0..100).map(|_| AI::<BE>::new(&device)).collect(),
+        (0..100).map(|_| AI::<BE>::new(&device)).collect(),
+        (0..100).map(|_| AI::<BE>::new(&device)).collect(),
+    ];
 
-        let time_taken = before.elapsed().unwrap().as_millis();
-        println!("{i} Time taken: {} ms", time_taken);
+    for i in 0..15 {
+        for (j, island) in islands.iter_mut().enumerate() {
+            let before = SystemTime::now();
+            let inner_ais = island.clone();
+            let mut ai_w_scores = inner_ais
+                .into_par_iter()
+                .map(|ai| (test_ai(&ai, &device), ai))
+                .collect::<Vec<_>>();
+            ai_w_scores.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
 
-        let high_score = ai_w_scores.iter().next().map(|(score, _)| *score).unwrap();
-        println!("{i} Best score: {}", high_score);
-        println!("{i} Best mape: {}", (1.0 / high_score) - 1.);
+            let time_taken = before.elapsed().unwrap().as_millis();
+            println!("{i},{j} Time taken: {} ms", time_taken);
 
-        all_ais = make_new_generation(ai_w_scores, &device, i);
+            let high_score = ai_w_scores.iter().next().map(|(score, _)| *score).unwrap();
+            println!("{i},{j} Best score: {}", high_score);
+            println!("{i},{j} Best mape: {}", (1.0 / high_score) - 1.);
+
+            *island = make_new_generation(ai_w_scores, &device, i);
+        }
     }
 }
 
