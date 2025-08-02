@@ -188,19 +188,25 @@ impl<B: Backend> AI<B> {
 
     pub fn max_amp_for_tensor<const N: usize>(input: &Tensor<B, N>) -> f32 {
         let data = input.clone().to_data();
-        let slice: &[f32] = data.as_slice().unwrap();
+        let slice: &[f32] = data
+            .as_slice()
+            .expect("tensor is not representable as a slice");
 
         slice
             .iter()
-            .max_by(|a, b| a.abs().partial_cmp(&b.abs()).unwrap())
+            .max_by(|a, b| {
+                a.abs()
+                    .partial_cmp(&b.abs())
+                    .expect("amplitude comparison failed")
+            })
             .copied()
-            .unwrap()
+            .expect("no max amplitude found")
             .abs()
     }
 
     pub fn max_amp_for_linear(input: &Linear<B>) -> f32 {
         let weight_max = Self::max_amp_for_tensor(&input.weight);
-        let bias_max = Self::max_amp_for_tensor(input.bias.as_ref().unwrap());
+        let bias_max = Self::max_amp_for_tensor(input.bias.as_ref().expect("bias not present"));
         weight_max.max(bias_max)
     }
     pub fn max_amp(&self) -> f32 {
@@ -213,8 +219,11 @@ impl<B: Backend> AI<B> {
         ];
         all_maximums
             .iter()
-            .max_by(|a, b| a.partial_cmp(&b).unwrap())
+            .max_by(|a, b| {
+                a.partial_cmp(&b)
+                    .expect("max amplitude comparison failed across all layers")
+            })
             .copied()
-            .unwrap()
+            .expect("no max amplitude found across all layers")
     }
 }

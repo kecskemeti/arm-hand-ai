@@ -96,7 +96,7 @@ impl Arm {
         impulse_joint_set: &mut ImpulseJointSet,
         wall_handle: RigidBodyHandle,
     ) -> Self {
-        let wall_rb = rigid_body_set.get(wall_handle).unwrap();
+        let wall_rb = rigid_body_set.get(wall_handle).expect("Wall not found.");
         let wall_middle_y = wall_rb.translation().y;
         let wall_x = wall_rb.translation().x;
 
@@ -396,7 +396,7 @@ impl Arm {
             .collect();
 
         // Sort by projection distance along the main axis
-        corner_projections.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+        corner_projections.sort_by(|a, b| a.1.partial_cmp(&b.1).expect("corner comparison failed"));
 
         // Get the two corners that are farthest along the main axis
         let farthest_corner = corner_projections.last()?.0;
@@ -752,7 +752,10 @@ impl Arm {
         let target_pos = Point2::new(joint_pos.x + adjustment.x, joint_pos.y + adjustment.y);
 
         // Get the target body's center of mass position
-        let target_body_pos = rigid_body_set.get(target_handle).unwrap().center_of_mass();
+        let target_body_pos = rigid_body_set
+            .get(target_handle)
+            .expect("force target not found")
+            .center_of_mass();
 
         // Calculate the direction vector from target body to target position
         let direction = target_pos - target_body_pos;
@@ -779,7 +782,9 @@ impl Arm {
         };
 
         // Apply the force to the target body
-        let target_rb = rigid_body_set.get_mut(target_handle).unwrap();
+        let target_rb = rigid_body_set
+            .get_mut(target_handle)
+            .expect("by this time we failed already when we query the target position");
         target_rb.add_force(force_vector, true);
 
         true
@@ -1095,7 +1100,7 @@ impl PhysicsWorld {
 }
 
 pub fn add_to_input(tensor_input: &mut Vec<f32>, corners: Option<((f32, f32), (f32, f32))>) {
-    let corners = corners.unwrap();
+    let corners = corners.expect("corners not found");
     tensor_input.push(corners.0 .0);
     tensor_input.push(corners.0 .1);
     tensor_input.push(corners.1 .0);
@@ -1106,7 +1111,7 @@ pub fn add_to_input_normalized(
     tensor_input: &mut Vec<f32>,
     corners: Option<((f32, f32), (f32, f32))>,
 ) {
-    let corners = corners.unwrap();
+    let corners = corners.expect("normalized corners not found");
     tensor_input.push(normalize_x(corners.0 .0));
     tensor_input.push(normalize_y(corners.0 .1));
     tensor_input.push(normalize_x(corners.1 .0));
@@ -1221,7 +1226,7 @@ pub fn test_ai<B: Backend>(network: &AI<B>, device: &B::Device) -> f32 {
         tensor_input.push(0.0);
         let tensor = Tensor::<B, 1>::from_floats(tensor_input.as_slice(), device);
         let data = network.apply(tensor).to_data();
-        let forces: &[f32] = data.as_slice().unwrap();
+        let forces: &[f32] = data.as_slice().expect("ai requested forces not available");
 
         world.apply_tricep_force(forces[0] * 2. - 1.);
         world.apply_forearm_force(forces[1] * 2. - 1.);
@@ -1233,9 +1238,9 @@ pub fn test_ai<B: Backend>(network: &AI<B>, device: &B::Device) -> f32 {
         world.step();
         saved_steps_scores.push(scorer(&init_state, &world));
     }
-    let last_score = *saved_steps_scores.last().unwrap();
+    let last_score = *saved_steps_scores.last().expect("saved steps scores empty");
 
-    saved_steps_scores.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    saved_steps_scores.sort_by(|a, b| a.partial_cmp(b).expect("saved scores not comparable"));
 
     (saved_steps_scores[saved_steps_scores.len() / 2] * 10.0
         + last_score * 5.
