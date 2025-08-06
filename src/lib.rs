@@ -1,6 +1,8 @@
 pub mod ai;
+pub mod base_ai;
+pub mod small_ai;
 
-use crate::ai::AI;
+use crate::base_ai::AI;
 use burn::prelude::Backend;
 use burn::tensor::cast::ToElement;
 use burn::tensor::Tensor;
@@ -396,7 +398,10 @@ impl Arm {
             .collect();
 
         // Sort by projection distance along the main axis
-        corner_projections.sort_by(|a, b| a.1.partial_cmp(&b.1).expect("corner comparison failed"));
+        corner_projections.sort_by(|a, b| {
+            a.1.partial_cmp(&b.1)
+                .unwrap_or_else(|| panic!("corner comparison failed a:{a:?} b:{b:?}"))
+        });
 
         // Get the two corners that are farthest along the main axis
         let farthest_corner = corner_projections.last()?.0;
@@ -1134,7 +1139,10 @@ pub fn saved_to_both(
     add_to_input_normalized(saved_corners, corners);
 }
 
-pub fn test_ai<B: Backend>(network: &AI<B>, device: &B::Device) -> f32 {
+pub fn test_ai<A, B: Backend>(network: &A, device: &B::Device) -> f32
+where
+    A: AI<B>,
+{
     let mut world = PhysicsWorld::new();
 
     let mut init_state: Vec<f32> = Vec::new();
@@ -1316,6 +1324,7 @@ pub fn create_physics_world() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ai::BigAI;
     use burn::backend::ndarray::NdArrayDevice;
     use burn::backend::NdArray;
     use std::time::SystemTime;
@@ -1332,7 +1341,7 @@ mod tests {
         type BE = NdArray<f32>;
         let device = NdArrayDevice::Cpu;
         let before = SystemTime::now();
-        let treat = test_ai(&AI::<BE>::new(&device), &device);
+        let treat = test_ai(&BigAI::<BE>::new(&device), &device);
         let time_taken = before.elapsed().unwrap().as_millis();
         println!("Time taken: {} ms", time_taken);
 

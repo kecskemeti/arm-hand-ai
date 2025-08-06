@@ -2,8 +2,9 @@ use burn::backend::candle::CandleDevice;
 use burn::backend::Candle;
 use burn::prelude::Backend;
 use burn::tensor::Distribution;
-use engine::ai::AI;
-use engine::test_ai;
+
+use engine::base_ai::AI;
+use engine::{ai, test_ai};
 use rand::Rng;
 use rayon::prelude::*;
 use std::time::SystemTime;
@@ -12,28 +13,21 @@ static BEST_PROPORTION: f32 = 0.25;
 static ISLAND_POPULATION: usize = 100;
 
 static SMALLEST_SD: f64 = 0.01;
-
+type BE = Candle<f32, i64>;
+type AI_MAKER<B: Backend> = impl Fn(&B::Device) -> AI<B>;
 fn main() {
     // experiment with island concept when mixing
-    type BE = Candle<f32, i64>;
+
     let device = CandleDevice::Cpu;
 
+    let ai_maker = |d| ai::BigAI::<BE>::new(d);
+
     let mut islands: [Vec<_>; 5] = [
-        (0..ISLAND_POPULATION)
-            .map(|_| AI::<BE>::new(&device))
-            .collect(),
-        (0..ISLAND_POPULATION)
-            .map(|_| AI::<BE>::new(&device))
-            .collect(),
-        (0..ISLAND_POPULATION)
-            .map(|_| AI::<BE>::new(&device))
-            .collect(),
-        (0..ISLAND_POPULATION)
-            .map(|_| AI::<BE>::new(&device))
-            .collect(),
-        (0..ISLAND_POPULATION)
-            .map(|_| AI::<BE>::new(&device))
-            .collect(),
+        (0..ISLAND_POPULATION).map(|_| ai_maker(&device)).collect(),
+        (0..ISLAND_POPULATION).map(|_| ai_maker(&device)).collect(),
+        (0..ISLAND_POPULATION).map(|_| ai_maker(&device)).collect(),
+        (0..ISLAND_POPULATION).map(|_| ai_maker(&device)).collect(),
+        (0..ISLAND_POPULATION).map(|_| ai_maker(&device)).collect(),
     ];
 
     for i in 0..1000 {
@@ -60,7 +54,7 @@ fn main() {
             println!("{i},{j} Best score: {}", high_score);
             println!("{i},{j} Best mape: {}", (1.0 / high_score) - 1.);
 
-            *island = make_new_generation(ai_w_scores, &device, BEST_PROPORTION);
+            *island = make_new_generation(ai_w_scores, &device, BEST_PROPORTION, &ai_maker);
         }
 
         if i % 30 == 0 {
@@ -69,13 +63,13 @@ fn main() {
     }
 }
 
-pub fn island_crossing<B: Backend>(islands: &mut [Vec<AI<B>>; 5]) {
+pub fn island_crossing<B: Backend, A: AI<B>>(islands: &mut [Vec<A>; 5]) {
     let mut rng = rand::thread_rng();
 
     let fittest_start = crate::ISLAND_POPULATION
         - (crate::ISLAND_POPULATION as f32 * crate::BEST_PROPORTION) as usize;
     // Clone the best individuals instead of holding references
-    let best: Vec<Vec<AI<B>>> = islands
+    let best: Vec<Vec<A>> = islands
         .iter()
         .map(|island| island[fittest_start..].to_vec())
         .collect();
@@ -96,11 +90,12 @@ pub fn island_crossing<B: Backend>(islands: &mut [Vec<AI<B>>; 5]) {
     }
 }
 
-fn make_new_generation<B: Backend>(
-    ais_w_score: Vec<(f32, AI<B>)>,
+fn make_new_generation<B: Backend, A: AI<B>>(
+    ais_w_score: Vec<(f32, A)>,
     device: &B::Device,
     best_proportion: f32,
-) -> Vec<AI<B>> {
+    ai_maker: &impl Fn(&B::Device) -> A,
+) -> Vec<A> {
     let best_score = ais_w_score[0].0;
     let std_deviation = ais_w_score[0].1.max_amp() as f64
         * if best_score < 0.5 {
@@ -125,7 +120,7 @@ fn make_new_generation<B: Backend>(
         .map(|(_, ai)| ai.clone())
         .collect();
     let mut new_generation = Vec::new();
-    new_generation.extend((0..3).map(|_| AI::<B>::new(device)));
+    new_generation.extend((0..3).map(|_| ai_maker(device)));
 
     for _ in 0..(ais_w_score.len() - best_ones.len() - new_generation.len()) {
         let (mother, father) = make_distinct(number_of_fittest);
@@ -153,11 +148,11 @@ pub fn make_distinct(max: usize) -> (usize, usize) {
     (specimen_one, specimen_two)
 }
 
-pub fn make_offspring<B: Backend>(
-    mother: &AI<B>,
-    father: &AI<B>,
+pub fn make_offspring<B: Backend, A: AI<B>>(
+    mother: &A,
+    father: &A,
     distribution: &Distribution,
-) -> AI<B> {
+) -> A {
     let mut rng = rand::thread_rng();
     match rng.random_range(0..15) {
         0 | 1 | 2 | 3 | 4 => mother.offspring_iw(father, distribution),
