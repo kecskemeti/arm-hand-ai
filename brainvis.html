@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Box Animation Visualizer</title>
+    <style>
+        body { font-family: sans-serif; display: flex; gap: 20px; padding: 20px; }
+        textarea { width: 400px; height: 500px; font-family: monospace; }
+        canvas { border: 1px solid #333; }
+        .controls { display: flex; flex-direction: column; gap: 10px; }
+    </style>
+</head>
+<body>
+<div class="controls">
+    <textarea id="dataInput" placeholder="Paste animation data here..."></textarea>
+    <button id="toggleBtn">Start</button>
+</div>
+<canvas id="viewport" width="500" height="500"></canvas>
+
+<script>
+    const canvas = document.getElementById('viewport');
+    const ctx = canvas.getContext('2d');
+    const textarea = document.getElementById('dataInput');
+    const toggleBtn = document.getElementById('toggleBtn');
+
+    const colors = ['#e6194b','#3cb44b','#ffe119','#4363d8','#f58231','#911eb4','#46f0f0'];
+
+    let frames = [];
+    let currentFrame = 0;
+    let animationRunning = false;
+    let animationTimeout = null;
+
+    function parseData(raw) {
+        try {
+            const wrapped = `[${raw.trim().split('\n').join(',')}]`;
+            return JSON.parse(wrapped);
+        } catch (e) {
+            alert("Invalid input format. Please check your brackets and commas.");
+            return [];
+        }
+    }
+
+    function getBounds(frame) {
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        frame.forEach(box => {
+            box.forEach(([x, y]) => {
+                if (x < minX) minX = x;
+                if (y < minY) minY = y;
+                if (x > maxX) maxX = x;
+                if (y > maxY) maxY = y;
+            });
+        });
+        return { minX, minY, maxX, maxY };
+    }
+
+    function drawFrame(frame) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const { minX, minY, maxX, maxY } = getBounds(frame);
+        const frameWidth = maxX - minX;
+        const frameHeight = maxY - minY;
+        const scale = canvas.width / Math.max(frameWidth, frameHeight);
+
+        const offsetX = (canvas.width - frameWidth * scale) / 2;
+        const offsetY = (canvas.height - frameHeight * scale) / 2;
+
+        frame.forEach((box, i) => {
+            ctx.beginPath();
+            box.forEach(([x, y], idx) => {
+                const px = offsetX + (x - minX) * scale;
+                const py = offsetY + (y - minY) * scale;
+                if (idx === 0) ctx.moveTo(px, py);
+                else ctx.lineTo(px, py);
+            });
+            ctx.closePath();
+            ctx.fillStyle = colors[i % colors.length];
+            ctx.fill();
+            ctx.strokeStyle = '#000';
+            ctx.stroke();
+        });
+    }
+
+    function animate() {
+        if (!animationRunning || frames.length === 0) return;
+        drawFrame(frames[currentFrame]);
+        currentFrame = (currentFrame + 1) % frames.length;
+        animationTimeout = setTimeout(animate, 1000);
+    }
+
+    function toggleAnimation() {
+        if (!animationRunning) {
+            frames = parseData(textarea.value);
+            if (frames.length === 0) return;
+            animationRunning = true;
+            toggleBtn.textContent = "Stop";
+            currentFrame = 0;
+            animate();
+        } else {
+            animationRunning = false;
+            toggleBtn.textContent = "Start";
+            clearTimeout(animationTimeout);
+        }
+    }
+
+    toggleBtn.addEventListener('click', toggleAnimation);
+</script>
+
+    <!--Can you write a quick visualiser for an animation? I am thinking of a small html and javascript website that takes data from a text area and animates the data next to it in a 500x500 viewport. The data entered in the text area should have the following form: it is built of lines. Each input line is a single frame in the animation, and it is within a square bracket pair i.e., []. The line has 7 pieces of data separated by comma and each piece is in a square bracket pair again. Each data piece is depicting four x and y coordinates of a box separated by commas. Each coordinate pair is also in square brackets []. Between the pair we have a comma as well. The y coordinates are all floats in the range of [-3,3], while the x coordinates are in the range of [0,3].-->
+
+<!--An example input line looks like this:-->
+<!--[[[0.69, 0.16000006], [1.19, 0.16000006], [1.19, 0.24000004], [0.69, 0.24000004]], [[1.72, 0.16500005], [2.22, 0.16500005], [2.22, 0.23500004], [1.72, 0.23500004]], [[2.55, 0.18500005], [2.6499999, 0.18500005], [2.6499999, 0.21500005], [2.55, 0.21500005]], [[2.7349997, 0.19000004], [2.7849998, 0.19000004], [2.7849998, 0.21000005], [2.7349997, 0.21000005]], [[2.8449996, 0.19000004], [2.8949997, 0.19000004], [2.8949997, 0.21000005], [2.8449996, 0.21000005]], [[2.59, 0.07500005], [2.61, 0.07500005], [2.61, 0.12500004], [2.59, 0.12500004]], [[2.59, -0.04499995], [2.61, -0.04499995], [2.61, 0.0050000492], [2.59, 0.0050000492]]]-->
+
+<!--When doing the drawing of a frame in the visualisation, draw a each box as depicted by its corners. Make each box a different colour. Once all 7 boxes are done wait till you draw the new frame for like 1s (very slow animation, I only have a few tens of frames). Try to scale each frame to make sure the top leftmost and the bottom rightmost points are the top left and bottom right of the canvas as well, disregard that this is making the visualisation a bit weird as the reference frame is different in every frame.-->
+</body>
+</html>

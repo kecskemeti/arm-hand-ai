@@ -4,31 +4,24 @@ use burn::prelude::Backend;
 use burn::tensor::Distribution;
 
 use engine::base_ai::AI;
-use engine::{ai, test_ai};
-use rand::Rng;
+use engine::ai;
 use rayon::prelude::*;
 use std::time::SystemTime;
+use engine::sim_for_ai::test_ai;
 
 static BEST_PROPORTION: f32 = 0.25;
 static ISLAND_POPULATION: usize = 100;
 
 static SMALLEST_SD: f64 = 0.01;
 type BE = Candle<f32, i64>;
-type AI_MAKER<B: Backend> = impl Fn(&B::Device) -> AI<B>;
+
 fn main() {
     // experiment with island concept when mixing
 
     let device = CandleDevice::Cpu;
 
-    let ai_maker = |d| ai::BigAI::<BE>::new(d);
+    let mut islands: [Vec<_>;5] = (0..5).map(|_| (0..ISLAND_POPULATION).map(|_| ai::BigAI::<BE>::new(&device)).collect()).collect::<Vec<_>>().try_into().unwrap();
 
-    let mut islands: [Vec<_>; 5] = [
-        (0..ISLAND_POPULATION).map(|_| ai_maker(&device)).collect(),
-        (0..ISLAND_POPULATION).map(|_| ai_maker(&device)).collect(),
-        (0..ISLAND_POPULATION).map(|_| ai_maker(&device)).collect(),
-        (0..ISLAND_POPULATION).map(|_| ai_maker(&device)).collect(),
-        (0..ISLAND_POPULATION).map(|_| ai_maker(&device)).collect(),
-    ];
 
     for i in 0..1000 {
         for (j, island) in islands.iter_mut().enumerate() {
@@ -54,7 +47,7 @@ fn main() {
             println!("{i},{j} Best score: {}", high_score);
             println!("{i},{j} Best mape: {}", (1.0 / high_score) - 1.);
 
-            *island = make_new_generation(ai_w_scores, &device, BEST_PROPORTION, &ai_maker);
+            *island = make_new_generation(ai_w_scores, &device, BEST_PROPORTION, |d| ai::BigAI::<BE>::new(d));
         }
 
         if i % 30 == 0 {
@@ -64,10 +57,8 @@ fn main() {
 }
 
 pub fn island_crossing<B: Backend, A: AI<B>>(islands: &mut [Vec<A>; 5]) {
-    let mut rng = rand::thread_rng();
-
-    let fittest_start = crate::ISLAND_POPULATION
-        - (crate::ISLAND_POPULATION as f32 * crate::BEST_PROPORTION) as usize;
+    let fittest_start = ISLAND_POPULATION
+        - (ISLAND_POPULATION as f32 * BEST_PROPORTION) as usize;
     // Clone the best individuals instead of holding references
     let best: Vec<Vec<A>> = islands
         .iter()
@@ -82,8 +73,8 @@ pub fn island_crossing<B: Backend, A: AI<B>>(islands: &mut [Vec<A>; 5]) {
         let (mothers_island, fathers_island) = make_distinct(island_count);
 
         let offspring = {
-            let mother = &best[mothers_island][rng.random_range(0..fittest_count)];
-            let father = &best[fathers_island][rng.random_range(0..fittest_count)];
+            let mother = &best[mothers_island][rand::random_range(0..fittest_count)];
+            let father = &best[fathers_island][rand::random_range(0..fittest_count)];
             make_offspring(mother, father, &Distribution::Normal(0.0, SMALLEST_SD))
         };
         islands[mothers_island][0] = offspring;
@@ -94,7 +85,7 @@ fn make_new_generation<B: Backend, A: AI<B>>(
     ais_w_score: Vec<(f32, A)>,
     device: &B::Device,
     best_proportion: f32,
-    ai_maker: &impl Fn(&B::Device) -> A,
+    ai_maker: impl Fn(&B::Device) -> A,
 ) -> Vec<A> {
     let best_score = ais_w_score[0].0;
     let std_deviation = ais_w_score[0].1.max_amp() as f64
@@ -134,12 +125,10 @@ fn make_new_generation<B: Backend, A: AI<B>>(
 }
 
 pub fn make_distinct(max: usize) -> (usize, usize) {
-    let mut rng = rand::thread_rng();
-
-    let specimen_one = rng.random_range(0..max);
+    let specimen_one = rand::random_range(0..max);
 
     let specimen_two = loop {
-        let potential_specimen = rng.random_range(0..max);
+        let potential_specimen = rand::random_range(0..max);
         if potential_specimen != specimen_one {
             break potential_specimen;
         }
@@ -153,8 +142,7 @@ pub fn make_offspring<B: Backend, A: AI<B>>(
     father: &A,
     distribution: &Distribution,
 ) -> A {
-    let mut rng = rand::thread_rng();
-    match rng.random_range(0..15) {
+    match rand::random_range(0..15) {
         0 | 1 | 2 | 3 | 4 => mother.offspring_iw(father, distribution),
         5 | 6 | 7 | 8 => mother.offspring_aw(father, distribution),
         9 => mother.offspring(father, distribution),

@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-rapier2d = "0.26.1"  # For 2D physics
+rapier2d = "0.28.0"  # For 2D physics
 burn = { version = "0.18.0", features = ["ndarray", "candle"] }
 rand = { version = "0.9" }
 rayon = { version = "1.10.0" }
