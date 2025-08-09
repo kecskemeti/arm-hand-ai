@@ -1,8 +1,11 @@
-use rapier2d::prelude::{nalgebra};
-use rapier2d::dynamics::{CCDSolver, ImpulseJointSet, IntegrationParameters, IslandManager, MultibodyJointSet, RevoluteJointBuilder, RigidBodyBuilder, RigidBodyHandle, RigidBodySet, RigidBodyType};
+use rapier2d::dynamics::{
+    CCDSolver, ImpulseJointSet, IntegrationParameters, IslandManager, MultibodyJointSet,
+    RevoluteJointBuilder, RigidBodyBuilder, RigidBodyHandle, RigidBodySet, RigidBodyType,
+};
 use rapier2d::geometry::{ColliderBuilder, ColliderSet, DefaultBroadPhase, NarrowPhase};
 use rapier2d::na::{point, vector, Point2, Vector2};
 use rapier2d::pipeline::{ActiveEvents, PhysicsPipeline};
+use rapier2d::prelude::nalgebra;
 
 // Ground dimensions
 const GROUND_HALF_WIDTH: f32 = 100.0;
@@ -76,37 +79,60 @@ const GROUND_MIDDLE_Y: f32 = -2.0;
 const X_RANGE: f32 = MAX_X - MIN_X;
 const Y_RANGE: f32 = MAX_Y - MIN_Y;
 
-fn create_dynamic_body(body_set: &mut RigidBodySet, centre_x: f32, centre_y: f32) -> RigidBodyHandle {
-    body_set.insert(RigidBodyBuilder::dynamic()
-        .translation(vector![centre_x,centre_y])
-        .can_sleep(false)
-        .ccd_enabled(true)
-        .build())
+fn create_dynamic_body(
+    body_set: &mut RigidBodySet,
+    centre_x: f32,
+    centre_y: f32,
+) -> RigidBodyHandle {
+    body_set.insert(
+        RigidBodyBuilder::dynamic()
+            .translation(vector![centre_x, centre_y])
+            .can_sleep(false)
+            .ccd_enabled(true)
+            .build(),
+    )
 }
 
-fn create_body_and_cub_collider(body_set: &mut RigidBodySet, centre_x: f32, centre_y: f32, collider_set: &mut ColliderSet, width: f32, height: f32) -> RigidBodyHandle {
+fn create_body_and_cub_collider(
+    body_set: &mut RigidBodySet,
+    centre_x: f32,
+    centre_y: f32,
+    collider_set: &mut ColliderSet,
+    width: f32,
+    height: f32,
+) -> RigidBodyHandle {
     let body_handle = create_dynamic_body(body_set, centre_x, centre_y);
     let collider_handle = ColliderBuilder::cuboid(width, height)
         .restitution(0.7)
         .friction(0.3)
-        .active_events(ActiveEvents::COLLISION_EVENTS).build();
+        .active_events(ActiveEvents::COLLISION_EVENTS)
+        .build();
     collider_set.insert_with_parent(collider_handle, body_handle, body_set);
     body_handle
 }
 
-fn joint_between_rigid_bodies(rb1: RigidBodyHandle, point1: Point2<f32>, rb2: RigidBodyHandle,point2: Point2<f32>, joint_set:&mut ImpulseJointSet)
-{
+fn joint_between_rigid_bodies(
+    rb1: RigidBodyHandle,
+    point1: Point2<f32>,
+    rb2: RigidBodyHandle,
+    point2: Point2<f32>,
+    joint_set: &mut ImpulseJointSet,
+) {
     let joint = RevoluteJointBuilder::new()
         .local_anchor1(point1)
-        .local_anchor2(point2).build();
+        .local_anchor2(point2)
+        .build();
 
     joint_set.insert(rb1, rb2, joint, true);
-
 }
 
-fn join_horizontal_rigid_bodies(rb1: RigidBodyHandle, rb2: RigidBodyHandle,
-                                rigid_body_set: &RigidBodySet, collider_set: &ColliderSet,
-                                joint_set: &mut ImpulseJointSet) {
+fn join_horizontal_rigid_bodies(
+    rb1: RigidBodyHandle,
+    rb2: RigidBodyHandle,
+    rigid_body_set: &RigidBodySet,
+    collider_set: &ColliderSet,
+    joint_set: &mut ImpulseJointSet,
+) {
     // Get rigid bodies
     let body1 = &rigid_body_set[rb1];
     let body2 = &rigid_body_set[rb2];
@@ -127,18 +153,23 @@ fn join_horizontal_rigid_bodies(rb1: RigidBodyHandle, rb2: RigidBodyHandle,
     };
 
     // Compute local anchor points
-    let local_anchor1 = point![half_extents1.x, 0.0];  // Right middle of collider1
+    let local_anchor1 = point![half_extents1.x, 0.0]; // Right middle of collider1
     let local_anchor2 = point![-half_extents2.x, 0.0]; // Left middle of collider2
 
     // Build and insert revolute joint
     let joint = RevoluteJointBuilder::new()
         .local_anchor1(local_anchor1)
-        .local_anchor2(local_anchor2).build();
+        .local_anchor2(local_anchor2)
+        .build();
 
     joint_set.insert(rb1, rb2, joint, true);
 }
 
-fn get_cuboid_collider_corners(rb:RigidBodyHandle, rigid_body_set: &RigidBodySet, collider_set: &ColliderSet) -> [Point2<f32>; 4] {
+fn get_cuboid_collider_corners(
+    rb: RigidBodyHandle,
+    rigid_body_set: &RigidBodySet,
+    collider_set: &ColliderSet,
+) -> [Point2<f32>; 4] {
     let body = &rigid_body_set.get(rb).unwrap();
     let collider = collider_set.get(body.colliders()[0]).unwrap();
     let cuboid = collider.shape().as_cuboid().unwrap();
@@ -147,12 +178,17 @@ fn get_cuboid_collider_corners(rb:RigidBodyHandle, rigid_body_set: &RigidBodySet
         point![-half_extents.x, -half_extents.y],
         point![half_extents.x, -half_extents.y],
         point![half_extents.x, half_extents.y],
-        point![-half_extents.x, half_extents.y]
+        point![-half_extents.x, half_extents.y],
     ];
     let rb_pos = body.position();
     let world_transform = *rb_pos;
 
-    local_corners.iter().map(|p| world_transform * p).collect::<Vec<Point2<f32>>>().try_into().unwrap()
+    local_corners
+        .iter()
+        .map(|p| world_transform * p)
+        .collect::<Vec<Point2<f32>>>()
+        .try_into()
+        .unwrap()
 }
 
 pub struct Arm {
@@ -195,45 +231,138 @@ impl Arm {
         println!("{upper_finger_x}");
 
         // Tricep
-        let tricep_handle = create_body_and_cub_collider(rigid_body_set, tricep_x, wall_middle_y, collider_set, TRICEP_HALF_WIDTH, TRICEP_HALF_HEIGHT);
-        println!("{:?}", get_cuboid_collider_corners(tricep_handle, rigid_body_set, collider_set));
-        joint_between_rigid_bodies(wall_handle, WALL_SHOULDER_ANCHOR, tricep_handle, TRICEP_SHOULDER_ANCHOR, impulse_joint_set);
+        let tricep_handle = create_body_and_cub_collider(
+            rigid_body_set,
+            tricep_x,
+            wall_middle_y,
+            collider_set,
+            TRICEP_HALF_WIDTH,
+            TRICEP_HALF_HEIGHT,
+        );
+        println!(
+            "{:?}",
+            get_cuboid_collider_corners(tricep_handle, rigid_body_set, collider_set)
+        );
+        joint_between_rigid_bodies(
+            wall_handle,
+            WALL_SHOULDER_ANCHOR,
+            tricep_handle,
+            TRICEP_SHOULDER_ANCHOR,
+            impulse_joint_set,
+        );
 
         // Forearm
-        let forearm_handle = create_body_and_cub_collider(rigid_body_set, forearm_x, wall_middle_y, collider_set, FOREARM_HALF_WIDTH, FOREARM_HALF_HEIGHT);
+        let forearm_handle = create_body_and_cub_collider(
+            rigid_body_set,
+            forearm_x,
+            wall_middle_y,
+            collider_set,
+            FOREARM_HALF_WIDTH,
+            FOREARM_HALF_HEIGHT,
+        );
 
         //Elbow:
-        join_horizontal_rigid_bodies(tricep_handle, forearm_handle, rigid_body_set, collider_set, impulse_joint_set);
+        join_horizontal_rigid_bodies(
+            tricep_handle,
+            forearm_handle,
+            rigid_body_set,
+            collider_set,
+            impulse_joint_set,
+        );
 
         // Palm
-        let palm_handle = create_body_and_cub_collider(rigid_body_set, palm_x, wall_middle_y, collider_set, PALM_HALF_WIDTH, PALM_HALF_HEIGHT);
+        let palm_handle = create_body_and_cub_collider(
+            rigid_body_set,
+            palm_x,
+            wall_middle_y,
+            collider_set,
+            PALM_HALF_WIDTH,
+            PALM_HALF_HEIGHT,
+        );
 
         //Wrist:
-        join_horizontal_rigid_bodies(forearm_handle, palm_handle, rigid_body_set, collider_set, impulse_joint_set);
+        join_horizontal_rigid_bodies(
+            forearm_handle,
+            palm_handle,
+            rigid_body_set,
+            collider_set,
+            impulse_joint_set,
+        );
 
         // Lower index finger
-        let lower_index_finger_handle = create_body_and_cub_collider(rigid_body_set, lower_finger_x, wall_middle_y, collider_set, FINGER_HALF_WIDTH, FINGER_HALF_HEIGHT);
+        let lower_index_finger_handle = create_body_and_cub_collider(
+            rigid_body_set,
+            lower_finger_x,
+            wall_middle_y,
+            collider_set,
+            FINGER_HALF_WIDTH,
+            FINGER_HALF_HEIGHT,
+        );
 
         // Index finger lower joint
-        join_horizontal_rigid_bodies(palm_handle, lower_index_finger_handle, rigid_body_set, collider_set, impulse_joint_set);
+        join_horizontal_rigid_bodies(
+            palm_handle,
+            lower_index_finger_handle,
+            rigid_body_set,
+            collider_set,
+            impulse_joint_set,
+        );
 
         // Upper index finger
-        let upper_index_finger_handle = create_body_and_cub_collider(rigid_body_set, upper_finger_x, wall_middle_y, collider_set, FINGER_HALF_WIDTH, FINGER_HALF_HEIGHT);
+        let upper_index_finger_handle = create_body_and_cub_collider(
+            rigid_body_set,
+            upper_finger_x,
+            wall_middle_y,
+            collider_set,
+            FINGER_HALF_WIDTH,
+            FINGER_HALF_HEIGHT,
+        );
 
         // Index finger upper joint
-        join_horizontal_rigid_bodies(lower_index_finger_handle, upper_index_finger_handle, rigid_body_set, collider_set, impulse_joint_set);
+        join_horizontal_rigid_bodies(
+            lower_index_finger_handle,
+            upper_index_finger_handle,
+            rigid_body_set,
+            collider_set,
+            impulse_joint_set,
+        );
 
         // Lower thumb
-        let lower_thumb_handle =
-            create_body_and_cub_collider(rigid_body_set, palm_x, wall_middle_y + PALM_TO_THUMB_OFFSET_Y, collider_set, THUMB_HALF_WIDTH, THUMB_HALF_HEIGHT);
+        let lower_thumb_handle = create_body_and_cub_collider(
+            rigid_body_set,
+            palm_x,
+            wall_middle_y + PALM_TO_THUMB_OFFSET_Y,
+            collider_set,
+            THUMB_HALF_WIDTH,
+            THUMB_HALF_HEIGHT,
+        );
 
         // lower thumb joint
-        joint_between_rigid_bodies(palm_handle, PALM_THUMB_ANCHOR, lower_thumb_handle, THUMB_JOINT_ANCHOR_TOP, impulse_joint_set);
+        joint_between_rigid_bodies(
+            palm_handle,
+            PALM_THUMB_ANCHOR,
+            lower_thumb_handle,
+            THUMB_JOINT_ANCHOR_TOP,
+            impulse_joint_set,
+        );
 
         // Upper thumb
-        let upper_thumb_handle = create_body_and_cub_collider(rigid_body_set, palm_x, wall_middle_y + PALM_TO_THUMB_OFFSET_Y + THUMB_SEGMENT_SPACING, collider_set, THUMB_HALF_WIDTH, THUMB_HALF_HEIGHT);
+        let upper_thumb_handle = create_body_and_cub_collider(
+            rigid_body_set,
+            palm_x,
+            wall_middle_y + PALM_TO_THUMB_OFFSET_Y + THUMB_SEGMENT_SPACING,
+            collider_set,
+            THUMB_HALF_WIDTH,
+            THUMB_HALF_HEIGHT,
+        );
 
-        joint_between_rigid_bodies(lower_thumb_handle, THUMB_JOINT_ANCHOR_BOTTOM, upper_thumb_handle, THUMB_JOINT_ANCHOR_TOP, impulse_joint_set);
+        joint_between_rigid_bodies(
+            lower_thumb_handle,
+            THUMB_JOINT_ANCHOR_BOTTOM,
+            upper_thumb_handle,
+            THUMB_JOINT_ANCHOR_TOP,
+            impulse_joint_set,
+        );
 
         Self {
             tricep_handle,
@@ -246,10 +375,23 @@ impl Arm {
         }
     }
 
-    pub fn all_corners(&self, rigid_body_set: &RigidBodySet, collider_set: &ColliderSet) -> Vec<[Point2<f32>; 4]> {
-        [self.tricep_handle, self.forearm_handle, self.palm_handle, self.lower_index_finger_handle, self.upper_index_finger_handle, self.lower_thumb_handle, self.upper_thumb_handle].iter().map(|&rb_handle| {
-            get_cuboid_collider_corners(rb_handle, rigid_body_set, collider_set)
-        }).collect()
+    pub fn all_corners(
+        &self,
+        rigid_body_set: &RigidBodySet,
+        collider_set: &ColliderSet,
+    ) -> Vec<[Point2<f32>; 4]> {
+        [
+            self.tricep_handle,
+            self.forearm_handle,
+            self.palm_handle,
+            self.lower_index_finger_handle,
+            self.upper_index_finger_handle,
+            self.lower_thumb_handle,
+            self.upper_thumb_handle,
+        ]
+        .iter()
+        .map(|&rb_handle| get_cuboid_collider_corners(rb_handle, rigid_body_set, collider_set))
+        .collect()
     }
 
     pub fn print_state(&self, rigid_body_set: &RigidBodySet, collider_set: &ColliderSet) {
@@ -840,7 +982,6 @@ impl Arm {
             self.upper_thumb_handle,
         ]
     }
-
 }
 
 pub struct PhysicsWorld {
@@ -918,7 +1059,6 @@ impl PhysicsWorld {
             .density(0.5) // Light ball
             .build();
         collider_set.insert_with_parent(ball_collider, ball_handle, &mut rigid_body_set);
-
 
         // Set up physics parameters
         let gravity = vector![0.0, -9.81];
@@ -1045,7 +1185,8 @@ impl PhysicsWorld {
     }
 
     pub fn all_arm_corners(&self) -> Vec<[Point2<f32>; 4]> {
-        self.arm.all_corners(&self.rigid_body_set, &self.collider_set)
+        self.arm
+            .all_corners(&self.rigid_body_set, &self.collider_set)
     }
 
     /// Gets the ball's position in world coordinates
@@ -1055,14 +1196,10 @@ impl PhysicsWorld {
         Some((translation.x, translation.y))
     }
 
-
     /// Prints ball state information
     pub fn print_ball_state(&self) {
         if let Some((x, y)) = self.ball_position() {
-            println!(
-                "Ball: pos=({:.3}, {:.3})",
-                x, y
-            );
+            println!("Ball: pos=({:.3}, {:.3})", x, y);
         }
     }
 }
@@ -1075,14 +1212,19 @@ pub fn normalize_y(y_value: f32) -> f32 {
     (y_value - MIN_Y) / Y_RANGE
 }
 
-
 #[cfg(test)]
 mod tests {
-    use rapier2d::dynamics::{RigidBodyBuilder, RigidBodySet};
+    use crate::phisics::{
+        create_body_and_cub_collider, get_cuboid_collider_corners, joint_between_rigid_bodies,
+        PhysicsWorld,
+    };
+    use rapier2d::dynamics::{
+        CCDSolver, IntegrationParameters, IslandManager, RigidBodyBuilder, RigidBodySet,
+    };
     use rapier2d::geometry::{ColliderBuilder, ColliderSet};
-    use rapier2d::na::vector;
-    use rapier2d::prelude::ImpulseJointSet;
-    use crate::phisics::{create_body_and_cub_collider, get_cuboid_collider_corners, joint_between_rigid_bodies, PhysicsWorld, TRICEP_SHOULDER_ANCHOR, WALL_HALF_HEIGHT, WALL_HALF_WIDTH, WALL_SHOULDER_ANCHOR};
+    use rapier2d::na::{point, vector};
+    use rapier2d::prelude::{nalgebra, MultibodyJointSet, NarrowPhase, PhysicsPipeline};
+    use rapier2d::prelude::{DefaultBroadPhase, ImpulseJointSet};
 
     #[test]
     fn test_physics_simulation() {
@@ -1101,11 +1243,18 @@ mod tests {
         let centre_y = 0.1;
         let half_width = 0.25;
         let half_height = 0.04;
-        let body_handle = create_body_and_cub_collider(&mut rigid_body_set, centre_x, centre_y, &mut collider_set, half_width, half_height);
+        let body_handle = create_body_and_cub_collider(
+            &mut rigid_body_set,
+            centre_x,
+            centre_y,
+            &mut collider_set,
+            half_width,
+            half_height,
+        );
         let body_pos = rigid_body_set[body_handle].position().translation;
         assert_eq!(body_pos.x, centre_x);
         assert_eq!(body_pos.y, centre_y);
-        let collider_pos =get_cuboid_collider_corners(body_handle, &rigid_body_set, &collider_set);
+        let collider_pos = get_cuboid_collider_corners(body_handle, &rigid_body_set, &collider_set);
         assert_eq!(collider_pos[0].x, centre_x - half_width);
         assert_eq!(collider_pos[0].y, centre_y - half_height);
         assert_eq!(collider_pos[1].x, centre_x + half_width);
@@ -1116,29 +1265,72 @@ mod tests {
         assert_eq!(collider_pos[3].y, centre_y + half_height);
     }
 
-
     #[test]
     fn bodyies_with_joint_define() {
-        // let mut rigid_body_set = RigidBodySet::new();
-        // let mut collider_set = ColliderSet::new();
-        // let mut impulse_joint_set = ImpulseJointSet::new();
-        // let centre_x = 0.47;
-        // let centre_y = 0.1;
-        // let half_width = 0.25;
-        // let half_height = 0.04;
-        // let wall_rigid_body = RigidBodyBuilder::fixed()
-        //     .translation(vector![0.0, 0.])
-        //     .build();
-        // let wall_handle = rigid_body_set.insert(wall_rigid_body);
-        //
-        // let wall_collider = ColliderBuilder::cuboid(WALL_HALF_WIDTH, WALL_HALF_HEIGHT)
-        //     .restitution(0.7)
-        //     .friction(0.3)
-        //     .build();
-        // collider_set.insert_with_parent(wall_collider, wall_handle, &mut rigid_body_set);
-        //
-        //
-        // let body_handle = create_body_and_cub_collider(&mut rigid_body_set, centre_x, centre_y, &mut collider_set, half_width, half_height);
-        // joint_between_rigid_bodies(wall_handle, WALL_SHOULDER_ANCHOR, body_handle, TRICEP_SHOULDER_ANCHOR, &mut impulse_joint_set);
+        let mut rigid_body_set = RigidBodySet::new();
+        let mut collider_set = ColliderSet::new();
+        let mut impulse_joint_set = ImpulseJointSet::new();
+        let centre_x = 0.47;
+        let centre_y = 0.1;
+        let half_width = 0.25;
+        let half_height = 0.04;
+        let wall_rigid_body = RigidBodyBuilder::fixed()
+            .translation(vector![0.0, 0.1])
+            .build();
+        let wall_handle = rigid_body_set.insert(wall_rigid_body);
+
+        let wall_collider = ColliderBuilder::cuboid(0.2, 2.0)
+            .restitution(0.7)
+            .friction(0.3)
+            .build();
+        collider_set.insert_with_parent(wall_collider, wall_handle, &mut rigid_body_set);
+
+        let body_handle = create_body_and_cub_collider(
+            &mut rigid_body_set,
+            centre_x,
+            centre_y,
+            &mut collider_set,
+            half_width,
+            half_height,
+        );
+        joint_between_rigid_bodies(
+            wall_handle,
+            point![0.2, 0.0],
+            body_handle,
+            point![-half_width * 2.0, 0.0],
+            &mut impulse_joint_set,
+        );
+
+        let mut physics_pipeline = PhysicsPipeline::new();
+        let mut integration_params = IntegrationParameters::default();
+        integration_params.dt = 1.0 / 240.0;
+        integration_params.max_ccd_substeps = 4;
+        let mut island_manager = IslandManager::new();
+        let mut broad_phase = DefaultBroadPhase::new();
+        let mut narrow_phase = NarrowPhase::new();
+        let mut multi_body_joint_set = MultibodyJointSet::new();
+        let mut ccd_solver = CCDSolver::new();
+
+        for _ in 0..10 {
+            let collider_pos =
+                get_cuboid_collider_corners(body_handle, &rigid_body_set, &collider_set);
+
+            physics_pipeline.step(
+                &vector![0.0, -9.81],
+                &integration_params,
+                &mut island_manager,
+                &mut broad_phase,
+                &mut narrow_phase,
+                &mut rigid_body_set,
+                &mut collider_set,
+                &mut impulse_joint_set,
+                &mut multi_body_joint_set,
+                &mut ccd_solver,
+                &(),
+                &(),
+            );
+
+            println!("{:?}", collider_pos);
+        }
     }
 }
