@@ -7,7 +7,7 @@ use engine::base_ai::AI;
 use engine::ai;
 use rayon::prelude::*;
 use std::time::SystemTime;
-use engine::sim_for_ai::test_ai;
+use engine::sim_for_ai::{test_ai, visual_ai};
 
 static BEST_PROPORTION: f32 = 0.25;
 static ISLAND_POPULATION: usize = 100;
@@ -15,13 +15,16 @@ static ISLAND_POPULATION: usize = 100;
 static SMALLEST_SD: f64 = 0.01;
 type BE = Candle<f32, i64>;
 
-fn main() {
-    // experiment with island concept when mixing
+fn ai_maker<BE:Backend>(d:&BE::Device) -> impl AI<BE> {
+    ai::BigAI::<BE>::new(d)
+}
 
+fn main() {
     let device = CandleDevice::Cpu;
 
-    let mut islands: [Vec<_>;5] = (0..5).map(|_| (0..ISLAND_POPULATION).map(|_| ai::BigAI::<BE>::new(&device)).collect()).collect::<Vec<_>>().try_into().unwrap();
+    let mut islands: [Vec<_>;5] = (0..5).map(|_| (0..ISLAND_POPULATION).map(|_| ai_maker::<BE>(&device)).collect()).collect::<Vec<_>>().try_into().unwrap();
 
+    let mut best_ais = Vec::new();
 
     for i in 0..1000 {
         for (j, island) in islands.iter_mut().enumerate() {
@@ -44,15 +47,20 @@ fn main() {
                 .next()
                 .map(|(score, _)| *score)
                 .expect("high score not found");
+            best_ais.push(ai_w_scores[0].1.clone());
             println!("{i},{j} Best score: {}", high_score);
             println!("{i},{j} Best mape: {}", (1.0 / high_score) - 1.);
 
-            *island = make_new_generation(ai_w_scores, &device, BEST_PROPORTION, |d| ai::BigAI::<BE>::new(d));
+            *island = make_new_generation(ai_w_scores, &device, BEST_PROPORTION, ai_maker);
         }
 
         if i % 30 == 0 {
             island_crossing(&mut islands);
         }
+    }
+    for (i,ai) in best_ais.iter().skip(best_ais.len() - islands.len()).enumerate() {
+        println!("Best ai of island {}", i);
+        visual_ai(ai, &device);
     }
 }
 

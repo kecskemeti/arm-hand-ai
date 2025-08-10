@@ -1,11 +1,8 @@
 use burn::prelude::{Backend, Tensor};
 use crate::base_ai::AI;
-use crate::phisics::{normalize_x, normalize_y, PhysicsWorld};
-
-type Corners = Option<((f32, f32), (f32, f32))>;
+use crate::physics::{normalize_x, normalize_y, Corners, PhysicsWorld};
 
 fn add_to_input(tensor_input: &mut Vec<f32>, corners: Corners) {
-    let corners = corners.expect("corners not found");
     for coord in [corners.0.0, corners.0.1, corners.1.0, corners.1.1] {
         tensor_input.push(coord);
     }
@@ -15,7 +12,6 @@ fn add_to_input_normalized(
     tensor_input: &mut Vec<f32>,
     corners: Corners,
 ) {
-    let corners = corners.expect("normalized corners not found");
     for corner in [corners.0, corners.1] {
         tensor_input.push(normalize_x(corner.0));
         tensor_input.push(normalize_y(corner.1));
@@ -50,59 +46,66 @@ fn save_world_state(world:&PhysicsWorld, save_location:&mut Vec<f32>) {
     on_captured_state(world, |corners| add_to_input(save_location, corners));
 }
 
-pub fn test_ai<A, B: Backend>(network: &A, device: &B::Device) -> f32
-where
-    A: AI<B>,
-{
-    let mut world = PhysicsWorld::new();
+pub fn single_simulation_step<B: Backend, A: AI<B>>(tensor_input:&mut Vec<f32>, previous_corners: &mut Vec<f32>, world: &mut PhysicsWorld, network: &A, device: &B::Device) {
+    tensor_input.clear();
+    tensor_input.extend(previous_corners.as_slice());
+    previous_corners.clear();
 
-    let mut init_state: Vec<f32> = Vec::new();
+    on_captured_state(&world, |corners| saved_to_both(tensor_input, previous_corners, corners));
 
-    save_world_state(&world, &mut init_state);
+    // previous ball x
+    tensor_input.push(0.0);
+    // previous ball y
+    tensor_input.push(0.0);
+    // previous distance to basket x
+    tensor_input.push(0.0);
+    // previous distance to basket y
+    tensor_input.push(0.0);
+
+    // ball x
+    tensor_input.push(0.0);
+    // ball y
+    tensor_input.push(0.0);
+    // distance to basket x
+    tensor_input.push(0.0);
+    // distance to basket y
+    tensor_input.push(0.0);
+    let tensor = Tensor::<B, 1>::from_floats(tensor_input.as_slice(), device);
+    let data = network.apply(tensor).to_data();
+    let forces: &[f32] = data.as_slice().expect("ai requested forces not available");
+
+    world.apply_tricep_force(forces[0]);
+    world.apply_forearm_force(forces[1]);
+    world.apply_palm_force(forces[2]);
+    world.apply_lower_index_finger_force(forces[3]);
+    world.apply_upper_index_finger_force(forces[4]);
+    world.apply_lower_thumb_force(forces[5]);
+    world.apply_upper_thumb_force(forces[6]);
+    world.step();
+}
+
+pub fn prepare_simulation() -> (PhysicsWorld, Vec<f32>, Vec<f32>) {
+    let world = PhysicsWorld::new();
 
     let mut previous_corners = Vec::new();
 
     on_captured_state(&world, |corners| add_to_input_normalized(&mut previous_corners, corners));
 
-    let mut tensor_input: Vec<f32> = Vec::new();
+    (world, previous_corners, Vec::new())
+}
+
+pub fn test_ai<A, B: Backend>(network: &A, device: &B::Device) -> f32
+where
+    A: AI<B>,
+{
+    let (mut world, mut previous_corners, mut tensor_input) = prepare_simulation();
+
+    let mut init_state: Vec<f32> = Vec::new();
+    save_world_state(&world, &mut init_state);
     let mut saved_steps_scores: Vec<f32> = Vec::new();
 
     for _ in 0..500 {
-        tensor_input.clear();
-        tensor_input.extend(&previous_corners);
-        previous_corners.clear();
-
-        on_captured_state(&world, |corners| saved_to_both(&mut tensor_input, &mut previous_corners, corners));
-
-        // previous ball x
-        tensor_input.push(0.0);
-        // previous ball y
-        tensor_input.push(0.0);
-        // previous distance to basket x
-        tensor_input.push(0.0);
-        // previous distance to basket y
-        tensor_input.push(0.0);
-
-        // ball x
-        tensor_input.push(0.0);
-        // ball y
-        tensor_input.push(0.0);
-        // distance to basket x
-        tensor_input.push(0.0);
-        // distance to basket y
-        tensor_input.push(0.0);
-        let tensor = Tensor::<B, 1>::from_floats(tensor_input.as_slice(), device);
-        let data = network.apply(tensor).to_data();
-        let forces: &[f32] = data.as_slice().expect("ai requested forces not available");
-
-        world.apply_tricep_force(forces[0]);
-        world.apply_forearm_force(forces[1]);
-        world.apply_palm_force(forces[2]);
-        world.apply_lower_index_finger_force(forces[3]);
-        world.apply_upper_index_finger_force(forces[4]);
-        world.apply_lower_thumb_force(forces[5]);
-        world.apply_upper_thumb_force(forces[6]);
-        world.step();
+        single_simulation_step(&mut tensor_input, &mut previous_corners, &mut world, network, device);
         saved_steps_scores.push(scorer(&init_state, &world));
     }
     let last_score = *saved_steps_scores.last().expect("saved steps scores empty");
@@ -129,6 +132,21 @@ fn scorer(init_state: &Vec<f32>, world: &PhysicsWorld) -> f32 {
 
     1. / (mape + 1.)
 }
+
+pub fn visual_ai<A, B: Backend>(network: &A, device: &B::Device)
+where
+    A: AI<B>,
+{
+    let (mut world, mut previous_corners, mut tensor_input) = prepare_simulation();
+
+    for i in 0..500 {
+        if i%5 == 0 {
+            println!("{:?}", world.all_arm_corners());
+        }
+        single_simulation_step(&mut tensor_input, &mut previous_corners, &mut world, network, device);
+    }
+}
+
 
 #[cfg(test)]
 mod tests {

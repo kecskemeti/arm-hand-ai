@@ -23,12 +23,17 @@
     const textarea = document.getElementById('dataInput');
     const toggleBtn = document.getElementById('toggleBtn');
 
-    const colors = ['#e6194b','#3cb44b','#ffe119','#4363d8','#f58231','#911eb4','#46f0f0'];
+    const baseColors = ['#e6194b','#3cb44b','#ffe119','#4363d8','#f58231','#911eb4','#46f0f0','#f032e6','#bcf60c','#fabebe','#008080','#e6beff','#9a6324','#fffac8','#800000'];
 
     let frames = [];
     let currentFrame = 0;
     let animationRunning = false;
     let animationTimeout = null;
+
+    let globalBounds = null;
+    let scale = 1;
+    let offsetX = 0;
+    let offsetY = 0;
 
     function parseData(raw) {
         try {
@@ -40,39 +45,41 @@
         }
     }
 
-    function getBounds(frame) {
+    function computeGlobalBounds(frames) {
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        frame.forEach(box => {
-            box.forEach(([x, y]) => {
-                if (x < minX) minX = x;
-                if (y < minY) minY = y;
-                if (x > maxX) maxX = x;
-                if (y > maxY) maxY = y;
+        frames.forEach(frame => {
+            frame.forEach(box => {
+                box.forEach(([x, y]) => {
+                    if (x < minX) minX = x;
+                    if (y < minY) minY = y;
+                    if (x > maxX) maxX = x;
+                    if (y > maxY) maxY = y;
+                });
             });
         });
         return { minX, minY, maxX, maxY };
     }
 
+    function setupScaling(bounds) {
+        const frameWidth = bounds.maxX - bounds.minX;
+        const frameHeight = bounds.maxY - bounds.minY;
+        scale = canvas.width / Math.max(frameWidth, frameHeight);
+        offsetX = (canvas.width - frameWidth * scale) / 2;
+        offsetY = (canvas.height - frameHeight * scale) / 2;
+    }
+
     function drawFrame(frame) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        const { minX, minY, maxX, maxY } = getBounds(frame);
-        const frameWidth = maxX - minX;
-        const frameHeight = maxY - minY;
-        const scale = canvas.width / Math.max(frameWidth, frameHeight);
-
-        const offsetX = (canvas.width - frameWidth * scale) / 2;
-        const offsetY = (canvas.height - frameHeight * scale) / 2;
-
         frame.forEach((box, i) => {
             ctx.beginPath();
             box.forEach(([x, y], idx) => {
-                const px = offsetX + (x - minX) * scale;
-                const py = offsetY + (y - minY) * scale;
+                const px = offsetX + (x - globalBounds.minX) * scale;
+                const py = canvas.height - (offsetY + (y - globalBounds.minY) * scale); // Y-axis flipped
                 if (idx === 0) ctx.moveTo(px, py);
                 else ctx.lineTo(px, py);
             });
             ctx.closePath();
-            ctx.fillStyle = colors[i % colors.length];
+            ctx.fillStyle = baseColors[i % baseColors.length];
             ctx.fill();
             ctx.strokeStyle = '#000';
             ctx.stroke();
@@ -83,13 +90,15 @@
         if (!animationRunning || frames.length === 0) return;
         drawFrame(frames[currentFrame]);
         currentFrame = (currentFrame + 1) % frames.length;
-        animationTimeout = setTimeout(animate, 1000);
+        animationTimeout = setTimeout(animate, 50);
     }
 
     function toggleAnimation() {
         if (!animationRunning) {
             frames = parseData(textarea.value);
             if (frames.length === 0) return;
+            globalBounds = computeGlobalBounds(frames);
+            setupScaling(globalBounds);
             animationRunning = true;
             toggleBtn.textContent = "Stop";
             currentFrame = 0;
