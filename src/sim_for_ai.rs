@@ -1,57 +1,64 @@
-use burn::prelude::{Backend, Tensor};
 use crate::base_ai::AI;
 use crate::physics::{normalize_x, normalize_y, Corners, PhysicsWorld};
+use burn::prelude::{Backend, Tensor};
 
 fn add_to_input(tensor_input: &mut Vec<f32>, corners: Corners) {
-    for coord in [corners.0.0, corners.0.1, corners.1.0, corners.1.1] {
+    for coord in [corners.0 .0, corners.0 .1, corners.1 .0, corners.1 .1] {
         tensor_input.push(coord);
     }
 }
 
-fn add_to_input_normalized(
-    tensor_input: &mut Vec<f32>,
-    corners: Corners,
-) {
+fn add_to_input_normalized(tensor_input: &mut Vec<f32>, corners: Corners) {
     for corner in [corners.0, corners.1] {
         tensor_input.push(normalize_x(corner.0));
         tensor_input.push(normalize_y(corner.1));
     }
 }
 
-fn saved_to_both(
-    tensor_input: &mut Vec<f32>,
-    saved_corners: &mut Vec<f32>,
-    corners: Corners,
-) {
+fn saved_to_both(tensor_input: &mut Vec<f32>, saved_corners: &mut Vec<f32>, corners: Corners) {
     add_to_input_normalized(tensor_input, corners);
     add_to_input_normalized(saved_corners, corners);
 }
 
 fn capture_world_state(world: &PhysicsWorld) -> [Corners; 7] {
-    [world.tricep_farthest_corners(),
-        world.forearm_farthest_corners(), world.palm_farthest_corners(),
-        world.lower_index_finger_farthest_corners(), world.upper_index_finger_farthest_corners(),
-        world.lower_thumb_farthest_corners(), world.upper_thumb_farthest_corners()]
+    [
+        world.tricep_farthest_corners(),
+        world.forearm_farthest_corners(),
+        world.palm_farthest_corners(),
+        world.lower_index_finger_farthest_corners(),
+        world.upper_index_finger_farthest_corners(),
+        world.lower_thumb_farthest_corners(),
+        world.upper_thumb_farthest_corners(),
+    ]
 }
 
 fn on_captured_state<FN>(world: &PhysicsWorld, mut action: FN)
-where FN: FnMut(Corners)
+where
+    FN: FnMut(Corners),
 {
     for corners in capture_world_state(world) {
         action(corners);
     }
 }
 
-fn save_world_state(world:&PhysicsWorld, save_location:&mut Vec<f32>) {
+fn save_world_state(world: &PhysicsWorld, save_location: &mut Vec<f32>) {
     on_captured_state(world, |corners| add_to_input(save_location, corners));
 }
 
-pub fn single_simulation_step<B: Backend, A: AI<B>>(tensor_input:&mut Vec<f32>, previous_corners: &mut Vec<f32>, world: &mut PhysicsWorld, network: &A, device: &B::Device) {
+pub fn single_simulation_step<B: Backend, A: AI<B>>(
+    tensor_input: &mut Vec<f32>,
+    previous_corners: &mut Vec<f32>,
+    world: &mut PhysicsWorld,
+    network: &A,
+    device: &B::Device,
+) {
     tensor_input.clear();
     tensor_input.extend(previous_corners.as_slice());
     previous_corners.clear();
 
-    on_captured_state(&world, |corners| saved_to_both(tensor_input, previous_corners, corners));
+    on_captured_state(&world, |corners| {
+        saved_to_both(tensor_input, previous_corners, corners)
+    });
 
     // previous ball x
     tensor_input.push(0.0);
@@ -89,7 +96,9 @@ pub fn prepare_simulation() -> (PhysicsWorld, Vec<f32>, Vec<f32>) {
 
     let mut previous_corners = Vec::new();
 
-    on_captured_state(&world, |corners| add_to_input_normalized(&mut previous_corners, corners));
+    on_captured_state(&world, |corners| {
+        add_to_input_normalized(&mut previous_corners, corners)
+    });
 
     (world, previous_corners, Vec::new())
 }
@@ -101,12 +110,21 @@ where
     let (mut world, mut previous_corners, mut tensor_input) = prepare_simulation();
 
     let mut init_state: Vec<f32> = Vec::new();
+    let mut previous_state: Vec<f32> = Vec::new();
     save_world_state(&world, &mut init_state);
     let mut saved_steps_scores: Vec<f32> = Vec::new();
 
     for _ in 0..500 {
-        single_simulation_step(&mut tensor_input, &mut previous_corners, &mut world, network, device);
-        saved_steps_scores.push(scorer(&init_state, &world));
+        previous_state.clear();
+        save_world_state(&world, &mut previous_state);
+        single_simulation_step(
+            &mut tensor_input,
+            &mut previous_corners,
+            &mut world,
+            network,
+            device,
+        );
+        saved_steps_scores.push(scorer(&init_state, &previous_state, &world));
     }
     let last_score = *saved_steps_scores.last().expect("saved steps scores empty");
 
@@ -119,18 +137,24 @@ where
         / 17.
 }
 
-fn scorer(init_state: &Vec<f32>, world: &PhysicsWorld) -> f32 {
+pub fn mape(init_state: &Vec<f32>, prev_state: &Vec<f32>) -> f32 {
+    init_state
+        .iter()
+        .zip(prev_state.iter())
+        .map(|(a, b)| ((a - b) / a).abs())
+        .sum::<f32>()
+        / init_state.len() as f32
+}
+
+fn scorer(init_state: &Vec<f32>, prev_state: &Vec<f32>, world: &PhysicsWorld) -> f32 {
     let mut end_state: Vec<f32> = Vec::new();
     save_world_state(world, &mut end_state);
 
-    let mape = init_state
-        .iter()
-        .zip(end_state.iter())
-        .map(|(a, b)| ((a - b) / a).abs())
-        .sum::<f32>()
-        / init_state.len() as f32;
+    let mape_init = mape(init_state, &end_state);
 
-    1. / (mape + 1.)
+    let mape_prev = mape(prev_state, &end_state);
+
+    ((1. / (mape_init + 1.)) + (1. / (mape_prev + 1.))) / 2.
 }
 
 pub fn visual_ai<A, B: Backend>(network: &A, device: &B::Device)
@@ -140,13 +164,18 @@ where
     let (mut world, mut previous_corners, mut tensor_input) = prepare_simulation();
 
     for i in 0..500 {
-        if i%5 == 0 {
+        if i % 5 == 0 {
             println!("{:?}", world.all_arm_corners());
         }
-        single_simulation_step(&mut tensor_input, &mut previous_corners, &mut world, network, device);
+        single_simulation_step(
+            &mut tensor_input,
+            &mut previous_corners,
+            &mut world,
+            network,
+            device,
+        );
     }
 }
-
 
 #[cfg(test)]
 mod tests {

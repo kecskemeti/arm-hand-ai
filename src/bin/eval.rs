@@ -3,30 +3,39 @@ use burn::backend::Candle;
 use burn::prelude::Backend;
 use burn::tensor::Distribution;
 
-use engine::base_ai::AI;
 use engine::ai;
+use engine::base_ai::AI;
+use engine::sim_for_ai::{test_ai, visual_ai};
 use rayon::prelude::*;
 use std::time::SystemTime;
-use engine::sim_for_ai::{test_ai, visual_ai};
 
 static BEST_PROPORTION: f32 = 0.25;
 static ISLAND_POPULATION: usize = 100;
+static ALWAYS_RAND_COUNT: usize = 3;
 
 static SMALLEST_SD: f64 = 0.01;
 type BE = Candle<f32, i64>;
 
-fn ai_maker<BE:Backend>(d:&BE::Device) -> impl AI<BE> {
+fn ai_maker<BE: Backend>(d: &BE::Device) -> impl AI<BE> {
     ai::BigAI::<BE>::new(d)
 }
 
 fn main() {
     let device = CandleDevice::Cpu;
 
-    let mut islands: [Vec<_>;5] = (0..5).map(|_| (0..ISLAND_POPULATION).map(|_| ai_maker::<BE>(&device)).collect()).collect::<Vec<_>>().try_into().unwrap();
+    let mut islands: [Vec<_>; 5] = (0..5)
+        .map(|_| {
+            (0..ISLAND_POPULATION)
+                .map(|_| ai_maker::<BE>(&device))
+                .collect()
+        })
+        .collect::<Vec<_>>()
+        .try_into()
+        .unwrap();
 
-    let mut best_ais = Vec::new();
+    let mut best_score = 0.0;
 
-    for i in 0..1000 {
+    for i in 0..10000 {
         for (j, island) in islands.iter_mut().enumerate() {
             let before = SystemTime::now();
             let inner_ais = island.clone();
@@ -47,7 +56,11 @@ fn main() {
                 .next()
                 .map(|(score, _)| *score)
                 .expect("high score not found");
-            best_ais.push(ai_w_scores[0].1.clone());
+            if high_score > best_score {
+                best_score = high_score;
+                println!("{i},{j} New best score: {}", high_score);
+                visual_ai(&ai_w_scores[0].1, &device);
+            }
             println!("{i},{j} Best score: {}", high_score);
             println!("{i},{j} Best mape: {}", (1.0 / high_score) - 1.);
 
@@ -58,15 +71,10 @@ fn main() {
             island_crossing(&mut islands);
         }
     }
-    for (i,ai) in best_ais.iter().skip(best_ais.len() - islands.len()).enumerate() {
-        println!("Best ai of island {}", i);
-        visual_ai(ai, &device);
-    }
 }
 
 pub fn island_crossing<B: Backend, A: AI<B>>(islands: &mut [Vec<A>; 5]) {
-    let fittest_start = ISLAND_POPULATION
-        - (ISLAND_POPULATION as f32 * BEST_PROPORTION) as usize;
+    let fittest_start = ISLAND_POPULATION - (ISLAND_POPULATION as f32 * BEST_PROPORTION) as usize;
     // Clone the best individuals instead of holding references
     let best: Vec<Vec<A>> = islands
         .iter()
@@ -85,7 +93,7 @@ pub fn island_crossing<B: Backend, A: AI<B>>(islands: &mut [Vec<A>; 5]) {
             let father = &best[fathers_island][rand::random_range(0..fittest_count)];
             make_offspring(mother, father, &Distribution::Normal(0.0, SMALLEST_SD))
         };
-        islands[mothers_island][0] = offspring;
+        islands[mothers_island][rand::random_range(0..ALWAYS_RAND_COUNT)] = offspring;
     }
 }
 
@@ -119,7 +127,7 @@ fn make_new_generation<B: Backend, A: AI<B>>(
         .map(|(_, ai)| ai.clone())
         .collect();
     let mut new_generation = Vec::new();
-    new_generation.extend((0..3).map(|_| ai_maker(device)));
+    new_generation.extend((0..ALWAYS_RAND_COUNT).map(|_| ai_maker(device)));
 
     for _ in 0..(ais_w_score.len() - best_ones.len() - new_generation.len()) {
         let (mother, father) = make_distinct(number_of_fittest);
