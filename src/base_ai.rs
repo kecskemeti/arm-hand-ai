@@ -1,6 +1,7 @@
 use burn::module::{Module, Param};
 use burn::nn::Linear;
 use burn::prelude::Backend;
+use burn::record::{FullPrecisionSettings, NamedMpkFileRecorder};
 use burn::tensor::Distribution::Uniform;
 use burn::tensor::{Distribution, Tensor};
 use std::fmt::Debug;
@@ -14,6 +15,11 @@ pub trait AI<B: Backend>: Module<B> + Debug {
     fn offspring_layers(&self, other_parent: &Self, d: &Distribution) -> Self;
     fn apply(&self, input: Tensor<B, 1>) -> Tensor<B, 1>;
     fn max_amp(&self) -> f32;
+
+    fn save_file(&self, filename: &str, recorder: &NamedMpkFileRecorder<FullPrecisionSettings>);
+    fn load_a_file(self, filename: &str, recorder: &NamedMpkFileRecorder<FullPrecisionSettings>);
+
+    fn network_name(&self) -> &'static str;
 }
 
 fn jiggle_tensor<const N: usize, B: Backend>(t: &Tensor<B, N>, d: &Distribution) -> Tensor<B, N> {

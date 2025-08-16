@@ -5,6 +5,7 @@ use crate::base_ai::{
 use burn::module::Module;
 use burn::nn::{Initializer, Linear, LinearConfig};
 use burn::prelude::Backend;
+use burn::record::{FullPrecisionSettings, NamedMpkFileRecorder};
 use burn::tensor::activation::{relu, tanh};
 use burn::tensor::{Distribution, Tensor};
 
@@ -97,6 +98,22 @@ impl<B: Backend> AI<B> for BigAI<B> {
             })
             .copied()
             .expect("no max amplitude found across all layers")
+    }
+
+    fn save_file(&self, filename: &str, recorder: &NamedMpkFileRecorder<FullPrecisionSettings>) {
+        self.clone()
+            .save_file(filename, recorder)
+            .expect("save failed");
+    }
+
+    fn load_a_file(self, filename: &str, recorder: &NamedMpkFileRecorder<FullPrecisionSettings>) {
+        let device = self.input.devices()[0].clone();
+        self.load_file(filename, recorder, &device)
+            .expect("load failed");
+    }
+
+    fn network_name(&self) -> &'static str {
+        "BigAI"
     }
 }
 

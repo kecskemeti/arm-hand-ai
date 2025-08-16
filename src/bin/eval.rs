@@ -1,11 +1,12 @@
 use burn::backend::candle::CandleDevice;
 use burn::backend::Candle;
-use burn::prelude::Backend;
+use burn::prelude::{Backend, Module};
 use burn::tensor::Distribution;
 
-use engine::ai;
+use burn::record::{FullPrecisionSettings, NamedMpkFileRecorder};
 use engine::base_ai::AI;
 use engine::sim_for_ai::{test_ai, visual_ai};
+use engine::small_ai;
 use rayon::prelude::*;
 use std::time::SystemTime;
 
@@ -17,11 +18,13 @@ static SMALLEST_SD: f64 = 0.01;
 type BE = Candle<f32, i64>;
 
 fn ai_maker<BE: Backend>(d: &BE::Device) -> impl AI<BE> {
-    ai::BigAI::<BE>::new(d)
+    // ai::BigAI::<BE>::new(d)
+    small_ai::SmallAI::<BE>::new(d)
 }
 
 fn main() {
     let device = CandleDevice::Cpu;
+    let recorder = NamedMpkFileRecorder::<FullPrecisionSettings>::new();
 
     let mut islands: [Vec<_>; 5] = (0..5)
         .map(|_| {
@@ -59,7 +62,12 @@ fn main() {
             if high_score > best_score {
                 best_score = high_score;
                 println!("{i},{j} New best score: {}", high_score);
-                visual_ai(&ai_w_scores[0].1, &device);
+                let best_ai = &ai_w_scores[0].1;
+                visual_ai(best_ai, &device);
+                best_ai.save_file(
+                    &format!("best_{}_{i}_{j}", best_ai.network_name()),
+                    &recorder,
+                );
             }
             println!("{i},{j} Best score: {}", high_score);
             println!("{i},{j} Best mape: {}", (1.0 / high_score) - 1.);
