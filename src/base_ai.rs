@@ -17,7 +17,11 @@ pub trait AI<B: Backend>: Module<B> + Debug {
     fn max_amp(&self) -> f32;
 
     fn save_file(&self, filename: &str, recorder: &NamedMpkFileRecorder<FullPrecisionSettings>);
-    fn load_a_file(self, filename: &str, recorder: &NamedMpkFileRecorder<FullPrecisionSettings>);
+    fn load_a_file(
+        self,
+        filename: &str,
+        recorder: &NamedMpkFileRecorder<FullPrecisionSettings>,
+    ) -> Self;
 
     fn network_name(&self) -> &'static str;
 }

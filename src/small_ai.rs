@@ -88,10 +88,14 @@ impl<B: Backend> AI<B> for SmallAI<B> {
             .expect("save failed");
     }
 
-    fn load_a_file(self, filename: &str, recorder: &NamedMpkFileRecorder<FullPrecisionSettings>) {
+    fn load_a_file(
+        self,
+        filename: &str,
+        recorder: &NamedMpkFileRecorder<FullPrecisionSettings>,
+    ) -> Self {
         let device = self.input.devices()[0].clone();
         self.load_file(filename, recorder, &device)
-            .expect("load failed");
+            .expect("load failed")
     }
 
     fn network_name(&self) -> &'static str {

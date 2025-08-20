@@ -22,21 +22,25 @@ fn ai_maker<BE: Backend>(d: &BE::Device) -> impl AI<BE> {
     small_ai::SmallAI::<BE>::new(d)
 }
 
+fn init_island_population<BE: Backend, A: AI<BE>>(
+    d: &BE::Device,
+    ai_maker: &impl Fn(&BE::Device) -> A,
+) -> Vec<A> {
+    (0..ISLAND_POPULATION).map(|_| ai_maker(d)).collect()
+}
+
 fn main() {
     let device = CandleDevice::Cpu;
     let recorder = NamedMpkFileRecorder::<FullPrecisionSettings>::new();
 
     let mut islands: [Vec<_>; 5] = (0..5)
-        .map(|_| {
-            (0..ISLAND_POPULATION)
-                .map(|_| ai_maker::<BE>(&device))
-                .collect()
-        })
+        .map(|_| init_island_population(&device, &|d| ai_maker::<BE>(d)))
         .collect::<Vec<_>>()
         .try_into()
         .unwrap();
 
     let mut best_score = 0.0;
+    let mut number_of_bests = 0;
 
     for i in 0..10000 {
         for (j, island) in islands.iter_mut().enumerate() {
@@ -64,21 +68,23 @@ fn main() {
                 println!("{i},{j} New best score: {}", high_score);
                 let best_ai = &ai_w_scores[0].1;
                 visual_ai(best_ai, &device);
-                best_ai.save_file(
-                    &format!("best_{}_{i}_{j}", best_ai.network_name()),
-                    &recorder,
-                );
+                best_ai.save_file(&ai_naming(best_ai, number_of_bests), &recorder);
+                number_of_bests += 1;
             }
             println!("{i},{j} Best score: {}", high_score);
             println!("{i},{j} Best mape: {}", (1.0 / high_score) - 1.);
 
-            *island = make_new_generation(ai_w_scores, &device, BEST_PROPORTION, ai_maker);
+            *island = make_new_generation(ai_w_scores, &device, BEST_PROPORTION, &ai_maker);
         }
 
         if i % 30 == 0 {
             island_crossing(&mut islands);
         }
     }
+}
+
+pub fn ai_naming<B: Backend, A: AI<B>>(best_ai: &A, i: usize) -> String {
+    format!("best_{}_{i}", best_ai.network_name())
 }
 
 pub fn island_crossing<B: Backend, A: AI<B>>(islands: &mut [Vec<A>; 5]) {
@@ -109,7 +115,7 @@ fn make_new_generation<B: Backend, A: AI<B>>(
     ais_w_score: Vec<(f32, A)>,
     device: &B::Device,
     best_proportion: f32,
-    ai_maker: impl Fn(&B::Device) -> A,
+    ai_maker: &impl Fn(&B::Device) -> A,
 ) -> Vec<A> {
     let best_score = ais_w_score[0].0;
     let std_deviation = ais_w_score[0].1.max_amp() as f64
@@ -146,6 +152,35 @@ fn make_new_generation<B: Backend, A: AI<B>>(
     new_generation.extend(best_ones);
 
     new_generation
+}
+
+pub fn resume_island<B: Backend, A: AI<B>>(
+    device: &B::Device,
+    ai_maker: &impl Fn(&B::Device) -> A,
+    best_proportion: f32,
+    recorder: &NamedMpkFileRecorder<FullPrecisionSettings>,
+) -> Vec<A> {
+    let mut initial = init_island_population::<B, A>(device, ai_maker);
+    let mut loaded_best = Vec::new();
+    let sample_specimen = initial[0].clone();
+
+    // TODO: Find the latest written filenames matching the pattern and then
+    // load at most 30 of them...
+
+    for i in 0..(best_proportion * ISLAND_POPULATION as f32) as usize {
+        loaded_best.push(
+            sample_specimen
+                .clone()
+                .load_a_file(&ai_naming(&sample_specimen, i), recorder),
+        );
+    }
+
+    for i in 0..(best_proportion * ISLAND_POPULATION as f32) as usize {
+        initial[i] = loaded_best[i % loaded_best.len()].clone();
+    }
+
+    let initial: Vec<(f32, A)> = initial.into_iter().map(|ai| (0., ai)).collect();
+    make_new_generation(initial, device, best_proportion, ai_maker)
 }
 
 pub fn make_distinct(max: usize) -> (usize, usize) {
