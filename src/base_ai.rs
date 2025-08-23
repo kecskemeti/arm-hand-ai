@@ -4,8 +4,11 @@ use burn::prelude::Backend;
 use burn::record::{FullPrecisionSettings, NamedMpkFileRecorder};
 use burn::tensor::Distribution::Uniform;
 use burn::tensor::{Distribution, Tensor};
+use regex::Regex;
 use std::fmt::Debug;
+use std::fs;
 use std::ops::Deref;
+use std::sync::LazyLock;
 
 pub trait AI<B: Backend>: Module<B> + Debug {
     fn jiggle(&self, d: &Distribution) -> Self;
@@ -123,4 +126,76 @@ pub fn max_amp_for_linear<B: Backend>(input: &Linear<B>) -> f32 {
     let weight_max = max_amp_for_tensor(&input.weight);
     let bias_max = max_amp_for_tensor(input.bias.as_ref().expect("bias not present"));
     weight_max.max(bias_max)
+}
+
+trait ListableAI<B: Backend>: AI<B> {
+    fn list(&self) -> Vec<String>;
+}
+
+impl<B: Backend, A: AI<B>> ListableAI<B> for A {
+    fn list(&self) -> Vec<String> {
+        let network_name = self.network_name();
+        let mut saved_files = Vec::new();
+
+        // Get the current directory (where model files are saved)
+        if let Ok(entries) = fs::read_dir(".") {
+            for entry in entries.flatten() {
+                if let Some(filename) = entry.file_name().to_str() {
+                    // Check if the file matches the pattern "best_{network_name}_*_*.mpk"
+                    let expected_prefix = format!("best_{}_", network_name);
+                    if filename.starts_with(&expected_prefix) && filename.ends_with(".mpk") {
+                        // Extract the base name without extension for loading
+                        if let Some(base_name) = filename.strip_suffix(".mpk") {
+                            saved_files.push(base_name.to_string());
+                        }
+                    }
+                }
+            }
+        }
+
+        // Sort by the suffix numbers (generation_number format like 1436_3)
+        saved_files.sort_by(|a, b| extract_seq(a).cmp(&extract_seq(b)).reverse());
+
+        saved_files.truncate(30);
+
+        saved_files
+    }
+}
+
+static REG: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"[A-Za-z]+_[A-Z a-z]+_(?<seq>[0-9]+)\.mpk").unwrap());
+
+pub fn extract_seq(filename: &str) -> usize {
+    REG.captures(filename)
+        .unwrap()
+        .name("seq")
+        .unwrap()
+        .as_str()
+        .parse::<usize>()
+        .unwrap()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ai::BigAI;
+    use burn::backend::candle::CandleDevice;
+    use burn::backend::Candle;
+
+    #[test]
+    fn test_extract_seq() {
+        assert_eq!(extract_seq("best_te st_1234.mpk"), 1234);
+    }
+
+    #[test]
+    fn test_load_fnames() {
+        type BE = Candle<f32, i64>;
+
+        let device = CandleDevice::Cpu;
+
+        let big_ai = BigAI::<BE>::new(&device);
+
+        let fnames = big_ai.list();
+        println!("{:?}", fnames);
+    }
 }

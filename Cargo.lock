@@ -1660,6 +1660,7 @@ dependencies = [
  "rand 0.9.1",
  "rapier2d",
  "rayon",
+ "regex",
 ]
 
 [[package]]

@@ -8,6 +8,7 @@ rapier2d = "0.28.0"  # For 2D physics
 burn = { version = "0.18.0", features = ["ndarray", "candle"] }
 rand = { version = "0.9" }
 rayon = { version = "1.10.0" }
+regex = { version = "*" }
 
 [profile.release]
 debug = 1
