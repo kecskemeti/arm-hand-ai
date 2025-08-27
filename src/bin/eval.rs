@@ -4,7 +4,7 @@ use burn::prelude::{Backend, Module};
 use burn::tensor::Distribution;
 
 use burn::record::{FullPrecisionSettings, NamedMpkFileRecorder};
-use engine::base_ai::AI;
+use engine::base_ai::{ListableAI, AI};
 use engine::sim_for_ai::{test_ai, visual_ai};
 use engine::small_ai;
 use rayon::prelude::*;
@@ -17,12 +17,12 @@ static ALWAYS_RAND_COUNT: usize = 3;
 static SMALLEST_SD: f64 = 0.01;
 type BE = Candle<f32, i64>;
 
-fn ai_maker<BE: Backend>(d: &BE::Device) -> impl AI<BE> {
+fn ai_maker<BE: Backend>(d: &BE::Device) -> impl ListableAI<BE> {
     // ai::BigAI::<BE>::new(d)
     small_ai::SmallAI::<BE>::new(d)
 }
 
-fn init_island_population<BE: Backend, A: AI<BE>>(
+fn init_island_population<BE: Backend, A: ListableAI<BE>>(
     d: &BE::Device,
     ai_maker: &impl Fn(&BE::Device) -> A,
 ) -> Vec<A> {
@@ -154,7 +154,7 @@ fn make_new_generation<B: Backend, A: AI<B>>(
     new_generation
 }
 
-pub fn resume_island<B: Backend, A: AI<B>>(
+pub fn resume_island<B: Backend, A: ListableAI<B>>(
     device: &B::Device,
     ai_maker: &impl Fn(&B::Device) -> A,
     best_proportion: f32,
@@ -163,16 +163,12 @@ pub fn resume_island<B: Backend, A: AI<B>>(
     let mut initial = init_island_population::<B, A>(device, ai_maker);
     let mut loaded_best = Vec::new();
     let sample_specimen = initial[0].clone();
+    let ai_fnames = sample_specimen.list();
 
-    // TODO: Find the latest written filenames matching the pattern and then
-    // load at most 30 of them...
-
-    for i in 0..(best_proportion * ISLAND_POPULATION as f32) as usize {
-        loaded_best.push(
-            sample_specimen
-                .clone()
-                .load_a_file(&ai_naming(&sample_specimen, i), recorder),
-        );
+    // TODO: make sure the list method receives the number of ais we want at most. i.e not 30
+    // TODO: instead of returning vec of string return vec of ais.
+    for fname in ai_fnames {
+        loaded_best.push(sample_specimen.clone().load_a_file(&fname, recorder));
     }
 
     for i in 0..(best_proportion * ISLAND_POPULATION as f32) as usize {

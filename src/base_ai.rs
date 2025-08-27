@@ -128,7 +128,7 @@ pub fn max_amp_for_linear<B: Backend>(input: &Linear<B>) -> f32 {
     weight_max.max(bias_max)
 }
 
-trait ListableAI<B: Backend>: AI<B> {
+pub trait ListableAI<B: Backend>: AI<B> {
     fn list(&self) -> Vec<String>;
 }
 
@@ -141,50 +141,46 @@ impl<B: Backend, A: AI<B>> ListableAI<B> for A {
         if let Ok(entries) = fs::read_dir(".") {
             for entry in entries.flatten() {
                 if let Some(filename) = entry.file_name().to_str() {
-                    // Check if the file matches the pattern "best_{network_name}_*_*.mpk"
-                    let expected_prefix = format!("best_{}_", network_name);
-                    if filename.starts_with(&expected_prefix) && filename.ends_with(".mpk") {
-                        // Extract the base name without extension for loading
-                        if let Some(base_name) = filename.strip_suffix(".mpk") {
-                            saved_files.push(base_name.to_string());
-                        }
+                    if let Some(seq) = extract_seq(filename, network_name) {
+                        saved_files.push((seq, filename.to_string()));
                     }
                 }
             }
         }
 
-        // Sort by the suffix numbers (generation_number format like 1436_3)
-        saved_files.sort_by(|a, b| extract_seq(a).cmp(&extract_seq(b)).reverse());
-
-        saved_files.truncate(30);
+        saved_files.sort_by_key(|a| a.0);
 
         saved_files
+            .into_iter()
+            .rev()
+            .take(30)
+            .map(|(_, filename)| filename)
+            .collect()
     }
 }
 
 static REG: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"[A-Za-z]+_[A-Z a-z]+_(?<seq>[0-9]+)\.mpk").unwrap());
+    LazyLock::new(|| Regex::new(r"[A-Za-z]+_(?<net_name>[A-Z a-z]+)_(?<seq>[0-9]+)\.mpk").unwrap());
 
-pub fn extract_seq(filename: &str) -> usize {
+pub fn extract_seq(filename: &str, network_name: &str) -> Option<usize> {
     REG.captures(filename)
-        .unwrap()
-        .name("seq")
-        .unwrap()
-        .as_str()
-        .parse::<usize>()
-        .unwrap()
+        .filter(|c| &c["net_name"] == network_name)
+        .map(|c| c.name("seq").map(|m| m.as_str()))
+        .flatten()
+        .map(|seq_str| seq_str.parse().ok())
+        .flatten()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ai::BigAI;
+    use crate::small_ai::SmallAI;
     use burn::backend::candle::CandleDevice;
     use burn::backend::Candle;
 
     #[test]
     fn test_extract_seq() {
-        assert_eq!(extract_seq("best_te st_1234.mpk"), 1234);
+        assert_eq!(extract_seq("best_te st_1234.mpk", "te st"), Some(1234));
     }
 
     #[test]
@@ -193,9 +189,9 @@ mod tests {
 
         let device = CandleDevice::Cpu;
 
-        let big_ai = BigAI::<BE>::new(&device);
+        let small_ai = SmallAI::<BE>::new(&device);
 
-        let fnames = big_ai.list();
+        let fnames = small_ai.list();
         println!("{:?}", fnames);
     }
 }
