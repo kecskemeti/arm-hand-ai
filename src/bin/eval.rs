@@ -33,14 +33,32 @@ fn main() {
     let device = CandleDevice::Cpu;
     let recorder = NamedMpkFileRecorder::<FullPrecisionSettings>::new();
 
-    let mut islands: [Vec<_>; 5] = (0..5)
-        .map(|_| init_island_population(&device, &|d| ai_maker::<BE>(d)))
-        .collect::<Vec<_>>()
-        .try_into()
-        .unwrap();
+    let sample_ai = ai_maker::<BE>(&device);
+    let args = std::env::args().collect::<Vec<_>>();
 
+    let (mut islands, mut number_of_bests): (Vec<Vec<_>>, usize) = if args.len() > 1
+        && args[1] == "resume"
+    {
+        (
+            (0..5)
+                .map(|_| resume_island(&device, &|d| ai_maker::<BE>(d), BEST_PROPORTION, &recorder))
+                .collect::<Vec<_>>(),
+            sample_ai.list().len(),
+        )
+    } else {
+        (
+            (0..5)
+                .map(|_| init_island_population(&device, &|d| ai_maker::<BE>(d)))
+                .collect::<Vec<_>>(),
+            0,
+        )
+    };
+
+    // TODO: load the best ai from above if restoring, i.e the first on the list
+    // on every island
+    // use test ai to obtain a score and use that as best - we now have best score!
+    //
     let mut best_score = 0.0;
-    let mut number_of_bests = 0;
 
     for i in 0..10000 {
         for (j, island) in islands.iter_mut().enumerate() {
@@ -87,7 +105,7 @@ pub fn ai_naming<B: Backend, A: AI<B>>(best_ai: &A, i: usize) -> String {
     format!("best_{}_{i}", best_ai.network_name())
 }
 
-pub fn island_crossing<B: Backend, A: AI<B>>(islands: &mut [Vec<A>; 5]) {
+pub fn island_crossing<B: Backend, A: AI<B>>(islands: &mut Vec<Vec<A>>) {
     let fittest_start = ISLAND_POPULATION - (ISLAND_POPULATION as f32 * BEST_PROPORTION) as usize;
     // Clone the best individuals instead of holding references
     let best: Vec<Vec<A>> = islands
