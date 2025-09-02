@@ -4,7 +4,7 @@ use burn::prelude::{Backend, Module};
 use burn::tensor::Distribution;
 
 use burn::record::{FullPrecisionSettings, NamedMpkFileRecorder};
-use engine::base_ai::{ListableAI, AI};
+use engine::base_ai::{extract_seq, ListableAI, AI};
 use engine::sim_for_ai::{test_ai, visual_ai};
 use engine::small_ai;
 use rayon::prelude::*;
@@ -36,31 +36,28 @@ fn main() {
     let sample_ai = ai_maker::<BE>(&device);
     let args = std::env::args().collect::<Vec<_>>();
 
-    let (mut islands, mut number_of_bests): (Vec<Vec<_>>, usize) = if args.len() > 1
-        && args[1] == "resume"
-    {
-        (
-            (0..5)
+    let (mut islands, mut number_of_bests, mut best_score): (Vec<Vec<_>>, usize, f32) =
+        if args.len() > 1 && args[1] == "resume" {
+            let islands = (0..5)
                 .map(|_| resume_island(&device, &|d| ai_maker::<BE>(d), BEST_PROPORTION, &recorder))
-                .collect::<Vec<_>>(),
-            sample_ai.list().len(),
-        )
-    } else {
-        (
-            (0..5)
-                .map(|_| init_island_population(&device, &|d| ai_maker::<BE>(d)))
-                .collect::<Vec<_>>(),
-            0,
-        )
-    };
+                .collect::<Vec<_>>();
+            let best_score = test_ai(&islands[0][0], &device);
+            (
+                islands,
+                extract_seq(&sample_ai.list()[0], sample_ai.network_name()).unwrap(),
+                best_score,
+            )
+        } else {
+            (
+                (0..5)
+                    .map(|_| init_island_population(&device, &|d| ai_maker::<BE>(d)))
+                    .collect::<Vec<_>>(),
+                0,
+                0.0,
+            )
+        };
 
-    // TODO: load the best ai from above if restoring, i.e the first on the list
-    // on every island
-    // use test ai to obtain a score and use that as best - we now have best score!
-    //
-    let mut best_score = 0.0;
-
-    for i in 0..10000 {
+    for i in 0..100 {
         for (j, island) in islands.iter_mut().enumerate() {
             let before = SystemTime::now();
             let inner_ais = island.clone();
@@ -95,7 +92,7 @@ fn main() {
             *island = make_new_generation(ai_w_scores, &device, BEST_PROPORTION, &ai_maker);
         }
 
-        if i % 30 == 0 {
+        if i % 100 == 0 {
             island_crossing(&mut islands);
         }
     }
