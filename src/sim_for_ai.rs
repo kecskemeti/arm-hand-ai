@@ -1,6 +1,8 @@
 use burn::prelude::{Backend, Tensor};
 use crate::base_ai::AI;
-use crate::physics::{normalize_x, normalize_y, Corners, PhysicsWorld};
+use crate::physics::arm::{normalize_x, normalize_y};
+use crate::physics::Corners;
+use crate::physics::world::PhysicsWorld;
 
 fn add_to_input(tensor_input: &mut Vec<f32>, corners: Corners) {
     for coord in [corners.0.0, corners.0.1, corners.1.0, corners.1.1] {
