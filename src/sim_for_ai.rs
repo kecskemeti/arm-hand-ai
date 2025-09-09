@@ -1,8 +1,8 @@
-use burn::prelude::{Backend, Tensor};
 use crate::base_ai::AI;
 use crate::physics::arm::{normalize_x, normalize_y};
-use crate::physics::Corners;
 use crate::physics::world::PhysicsWorld;
+use crate::physics::Corners;
+use burn::prelude::{Backend, Tensor};
 
 fn add_to_input(tensor_input: &mut Vec<f32>, corners: Corners) {
     for coord in [corners.0 .0, corners.0 .1, corners.1 .0, corners.1 .1] {
@@ -152,11 +152,18 @@ fn scorer(init_state: &Vec<f32>, prev_state: &Vec<f32>, world: &PhysicsWorld) ->
     let mut end_state: Vec<f32> = Vec::new();
     save_world_state(world, &mut end_state);
 
-    let mape_init = mape(init_state, &end_state);
+    let exp_y = (init_state[1] + init_state[3]) / 2.0;
+    let tricep_diff = extract_diff(&end_state, 1, exp_y) * 10.0;
+    let forearm_diff = extract_diff(&end_state, 5, exp_y) * 5.0;
+    let palm_diff = extract_diff(&end_state, 9, exp_y);
+    let lower_index_diff = extract_diff(&end_state, 13, exp_y);
+    let upper_index_diff = extract_diff(&end_state, 17, exp_y);
 
-    let mape_prev = mape(prev_state, &end_state);
+    1.0 / (tricep_diff + forearm_diff + palm_diff + lower_index_diff + upper_index_diff + 0.01)
+}
 
-    ((1. / (mape_init + 1.)) + (1. / (mape_prev + 1.))) / 2.
+fn extract_diff(end_state: &Vec<f32>, idx: usize, exp_y: f32) -> f32 {
+    ((end_state[idx] + end_state[idx + 2]) / 2.0 - exp_y).abs()
 }
 
 pub fn visual_ai<A, B: Backend>(network: &A, device: &B::Device)

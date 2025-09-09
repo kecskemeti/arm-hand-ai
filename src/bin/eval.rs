@@ -87,7 +87,6 @@ fn main() {
                 number_of_bests += 1;
             }
             println!("{i},{j} Best score: {}", high_score);
-            println!("{i},{j} Best mape: {}", (1.0 / high_score) - 1.);
 
             *island = make_new_generation(ai_w_scores, &device, BEST_PROPORTION, &ai_maker);
         }
