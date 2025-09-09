@@ -1,4 +1,4 @@
-use engine::physics::PhysicsWorld;
+use engine::physics::world::PhysicsWorld;
 
 fn main() {
     let mut physics_world = PhysicsWorld::new();
@@ -7,7 +7,6 @@ fn main() {
     for step in 0..=200 {
         if step % 20 == 0 {
             println!("Step {}", step);
-            physics_world.print_arm_state();
 
             // Print tricep's farthest corners
             let ((upper_x, upper_y), (lower_x, lower_y)) =
@@ -25,7 +24,6 @@ fn main() {
                     "Forearm farthest corners: upper=({:.3}, {:.3}), lower=({:.3}, {:.3})",
                     upper_x, upper_y, lower_x, lower_y
                 );
-            physics_world.print_ball_state();
         }
 
         // Apply a small force to the tricep to create movement
