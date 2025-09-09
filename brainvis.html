@@ -40,7 +40,7 @@
             const wrapped = `[${raw.trim().split('\n').join(',')}]`;
             return JSON.parse(wrapped);
         } catch (e) {
-            alert("Invalid input format. Please check your brackets and commas.");
+            alert("Invalid input format. Please check your brackets and commas."+e.message);
             return [];
         }
     }
